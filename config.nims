@@ -78,80 +78,80 @@ if defined(windows):
 # given its near-ubiquity in the x86 installed base, it renders a distribution
 # build more viable on an overall broader range of hardware.
 #
-if defined(disableMarchNative):
-  if defined(i386) or defined(amd64):
-    if defined(macosx):
-      # https://support.apple.com/kb/SP777
-      # "macOS Mojave - Technical Specifications": EOL as of 2021-10 so macOS
-      # users on pre-Nehalem must be running either some Hackintosh, or using
-      # an unsupported macOS version beyond that most recently EOL'd. Nehalem
-      # supports instruction set extensions through SSE4.2 and POPCNT.
-      switch("passC", "-march=nehalem")
-      switch("passL", "-march=nehalem")
-    else:
-      switch("passC", "-mssse3")
-      switch("passL", "-mssse3")
-elif defined(macosx) and defined(arm64):
-  # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
-  switch("passC", "-mcpu=apple-a14")
-  switch("passL", "-mcpu=apple-a14")
-else:
-  switch("passC", "-march=native")
-  switch("passL", "-march=native")
-  if defined(windows):
-    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
-    # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
-    switch("passC", "-mno-avx512f")
-    switch("passL", "-mno-avx512f")
+# if defined(disableMarchNative):
+#   if defined(i386) or defined(amd64):
+#     if defined(macosx):
+#       # https://support.apple.com/kb/SP777
+#       # "macOS Mojave - Technical Specifications": EOL as of 2021-10 so macOS
+#       # users on pre-Nehalem must be running either some Hackintosh, or using
+#       # an unsupported macOS version beyond that most recently EOL'd. Nehalem
+#       # supports instruction set extensions through SSE4.2 and POPCNT.
+#       switch("passC", "-march=nehalem")
+#       switch("passL", "-march=nehalem")
+#     else:
+#       switch("passC", "-mssse3")
+#       switch("passL", "-mssse3")
+# elif defined(macosx) and defined(arm64):
+#   # Apple's Clang can't handle "-march=native" on M1: https://github.com/status-im/nimbus-eth2/issues/2758
+#   switch("passC", "-mcpu=apple-a14")
+#   switch("passL", "-mcpu=apple-a14")
+# else:
+#   switch("passC", "-march=native")
+#   switch("passL", "-march=native")
+#   if defined(windows):
+#     # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=65782
+#     # ("-fno-asynchronous-unwind-tables" breaks Nim's exception raising, sometimes)
+#     switch("passC", "-mno-avx512f")
+#     switch("passL", "-mno-avx512f")
 
-# omitting frame pointers in nim breaks the GC
-# https://github.com/nim-lang/Nim/issues/10625
-switch("passC", "-fno-omit-frame-pointer")
-switch("passL", "-fno-omit-frame-pointer")
+# # omitting frame pointers in nim breaks the GC
+# # https://github.com/nim-lang/Nim/issues/10625
+# switch("passC", "-fno-omit-frame-pointer")
+# switch("passL", "-fno-omit-frame-pointer")
 
---threads:on
---opt:speed
---excessiveStackTrace:on
+# --threads:on
+# --opt:speed
+# --excessiveStackTrace:on
 # enable metric collection
 --define:metrics
 --define:chronicles_line_numbers # These are disabled for release binaries
 # for heap-usage-by-instance-type metrics and object base-type strings
 --define:nimTypeNames
 
-const currentDir = currentSourcePath()[0 .. ^(len("config.nims") + 1)]
-switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
+# const currentDir = currentSourcePath()[0 .. ^(len("config.nims") + 1)]
+# switch("define", "nim_compiler_path=" & currentDir & "env.sh nim")
 switch("define", "withoutPCRE")
 
-switch("import", "testutils/moduletests")
+# switch("import", "testutils/moduletests")
 
-when not defined(disable_libbacktrace):
-  --define:nimStackTraceOverride
-  switch("import", "libbacktrace")
-else:
-  --stacktrace:on
-  --linetrace:on
+# when not defined(disable_libbacktrace):
+#   --define:nimStackTraceOverride
+#   switch("import", "libbacktrace")
+# else:
+#   --stacktrace:on
+#   --linetrace:on
 
-var canEnableDebuggingSymbols = true
-if defined(macosx):
-  # The default open files limit is too low on macOS (512), breaking the
-  # "--debugger:native" build. It can be increased with `ulimit -n 1024`.
-  let openFilesLimitTarget = 1024
-  var openFilesLimit = 0
-  try:
-    openFilesLimit = staticExec("ulimit -n").strip(chars = Whitespace + Newlines).parseInt()
-    if openFilesLimit < openFilesLimitTarget:
-      echo "Open files limit too low to enable debugging symbols and lightweight stack traces."
-      echo "Increase it with \"ulimit -n " & $openFilesLimitTarget & "\""
-      canEnableDebuggingSymbols = false
-  except:
-    echo "ulimit error"
-# We ignore this resource limit on Windows, where a default `ulimit -n` of 256
-# in Git Bash is apparently ignored by the OS, and on Linux where the default of
-# 1024 is good enough for us.
+# var canEnableDebuggingSymbols = true
+# if defined(macosx):
+#   # The default open files limit is too low on macOS (512), breaking the
+#   # "--debugger:native" build. It can be increased with `ulimit -n 1024`.
+#   let openFilesLimitTarget = 1024
+#   var openFilesLimit = 0
+#   try:
+#     openFilesLimit = staticExec("ulimit -n").strip(chars = Whitespace + Newlines).parseInt()
+#     if openFilesLimit < openFilesLimitTarget:
+#       echo "Open files limit too low to enable debugging symbols and lightweight stack traces."
+#       echo "Increase it with \"ulimit -n " & $openFilesLimitTarget & "\""
+#       canEnableDebuggingSymbols = false
+#   except:
+#     echo "ulimit error"
+# # We ignore this resource limit on Windows, where a default `ulimit -n` of 256
+# # in Git Bash is apparently ignored by the OS, and on Linux where the default of
+# # 1024 is good enough for us.
 
-if canEnableDebuggingSymbols:
-  # add debugging symbols and original files and line numbers
-  --debugger:native
+# if canEnableDebuggingSymbols:
+#   # add debugging symbols and original files and line numbers
+#   --debugger:native
 
 --define:nimOldCaseObjects # https://github.com/status-im/nim-confutils/issues/9
 
@@ -179,27 +179,27 @@ switch("warning", "LockLevel:off")
 # Unfortunately this is filename based instead of path-based
 # Assumes GCC
 
-# BLST
-put("server.always", "-fno-lto")
-put("assembly.always", "-fno-lto")
+# # BLST
+# put("server.always", "-fno-lto")
+# put("assembly.always", "-fno-lto")
 
-# Secp256k1
-put("secp256k1.always", "-fno-lto")
+# # Secp256k1
+# put("secp256k1.always", "-fno-lto")
 
-# BearSSL - only RNGs
-put("aesctr_drbg.always", "-fno-lto")
-put("hmac_drbg.always", "-fno-lto")
-put("sysrng.always", "-fno-lto")
+# # BearSSL - only RNGs
+# put("aesctr_drbg.always", "-fno-lto")
+# put("hmac_drbg.always", "-fno-lto")
+# put("sysrng.always", "-fno-lto")
 
-# Miracl - only ECP to derive public key from private key
-put("ecp_BLS12381.always", "-fno-lto")
+# # Miracl - only ECP to derive public key from private key
+# put("ecp_BLS12381.always", "-fno-lto")
 
-# ############################################################
-#
-#                    Spurious warnings
-#
-# ############################################################
+# # ############################################################
+# #
+# #                    Spurious warnings
+# #
+# # ############################################################
 
-# sqlite3.c: In function ‘sqlite3SelectNew’:
-# vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
-put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr
+# # sqlite3.c: In function ‘sqlite3SelectNew’:
+# # vendor/nim-sqlite3-abi/sqlite3.c:124500: warning: function may return address of local variable [-Wreturn-local-addr]
+# put("sqlite3.always", "-fno-lto") # -Wno-return-local-addr

@@ -59,3 +59,6 @@ resttest0_data
 # Nimble user files
 nimble.develop
 nimble.paths
+
+# wasm files
+*.wasm
