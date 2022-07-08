@@ -21,9 +21,10 @@
 
 import
   std/[typetraits, sets, hashes],
-  chronicles,
   stew/[bitops2, objects],
   "."/[base, phase0]
+when not defined(lightClientEmbedded):
+  import chronicles
 
 export base, sets
 

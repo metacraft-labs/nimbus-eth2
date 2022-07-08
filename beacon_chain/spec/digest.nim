@@ -25,15 +25,21 @@ import
   # Standard library
   std/hashes,
   # Status libraries
-  chronicles,
   nimcrypto/[sha2, hash],
-  stew/[byteutils, endians2, objects],
-  json_serialization
+  stew/[byteutils, endians2, objects]
+
+when not defined(lightClientEmbedded):
+  import
+    json_serialization,
+    chronicles
 
 export
   # Exports from sha2 / hash are explicit to avoid exporting upper-case `$` and
   # constant-time `==`
-  hash.fromHex, json_serialization
+  hash.fromHex
+
+when not defined(lightClientEmbedded):
+  export json_serialization
 
 type
   Eth2Digest* = MDigest[32 * 8] ## `hash32` from spec

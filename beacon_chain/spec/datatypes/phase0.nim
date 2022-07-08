@@ -16,8 +16,10 @@
 {.push raises: [Defect].}
 
 import
-  chronicles,
   ./base
+
+when not defined(lightClientEmbedded):
+  import  chronicles
 
 export base
 

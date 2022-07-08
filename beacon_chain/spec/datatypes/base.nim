@@ -63,16 +63,23 @@
 import
   std/[macros, hashes, sets, strutils, tables, typetraits],
   stew/[assign2, byteutils, results],
-  chronicles,
-  json_serialization,
-  chronos/timer,
   ssz_serialization/types as sszTypes,
-  ../../version,
-  ".."/[beacon_time, crypto, digest, presets]
+  ../digest
 
 export
-  tables, results, json_serialization, timer, sszTypes, beacon_time, crypto,
-  digest, presets
+  tables, results, sszTypes, digest
+
+when not defined(lightClientEmbedded):
+  import
+    chronos/timer,
+    chronicles,
+    json_serialization,
+    ../../version,
+    ../[beacon_time, crypt, presets]
+
+  export
+    json_serialization, timer, beacon_time, crypto, presets
+
 
 const SPEC_VERSION* = "1.2.0-rc.1"
 ## Spec version we're aiming to be compatible with, right now
