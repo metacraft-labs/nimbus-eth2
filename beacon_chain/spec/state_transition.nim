@@ -515,7 +515,9 @@ proc makeBeaconBlock*(
     # TODO:
     # `verificationFlags` is needed only in tests and can be
     # removed if we don't use invalid signatures there
-    verificationFlags: UpdateFlags = {}): Result[ForkedBeaconBlock, cstring] =
+    verificationFlags: UpdateFlags = {},
+    transactions_root: Opt[Eth2Digest] = Opt.none Eth2Digest):
+    Result[ForkedBeaconBlock, cstring] =
   ## Create a block for the given state. The latest block applied to it will
   ## be used for the parent_root value, and the slot will be take from
   ## state.slot meaning process_slots must be called up to the slot for which
@@ -536,6 +538,13 @@ proc makeBeaconBlock*(
     if res.isErr:
       rollback(state)
       return err(res.error())
+
+    # Manual override for MEV
+    if transactions_root.isSome:
+      withState(state):
+        when stateFork >= BeaconStateFork.Bellatrix:
+          state.data.latest_execution_payload_header.transactions_root =
+            transactions_root.get
 
     state.`kind Data`.root = hash_tree_root(state.`kind Data`.data)
     blck.`kind Data`.state_root = state.`kind Data`.root
