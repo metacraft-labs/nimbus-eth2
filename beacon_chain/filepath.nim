@@ -14,7 +14,7 @@ export io2
 when defined(windows):
   import stew/[windows/acl]
 
-proc secureCreatePath*(path: string): IoResult[void] =
+proc secureCreatePath*(path: string): IoResult[void] {.raises: [].} =
   when defined(windows):
     let sres = createFoldersUserOnlySecurityDescriptor()
     if sres.isErr():

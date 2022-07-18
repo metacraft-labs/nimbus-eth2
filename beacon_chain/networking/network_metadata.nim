@@ -93,7 +93,7 @@ type DeploymentPhase* {.pure.} = enum
   Testnet,
   Mainnet
 
-func deploymentPhase*(genesisData: string): DeploymentPhase =
+func deploymentPhase*(genesisData: string): DeploymentPhase {.raises: [].} =
   # SSZ processing at compile time does not work well.
   #
   # `BeaconState` layout:
@@ -142,7 +142,7 @@ const
   eth2NetworksDir = currentSourcePath.parentDir.replace('\\', '/') & "/../../vendor/eth2-networks"
   mergeTestnetsDir = currentSourcePath.parentDir.replace('\\', '/') & "/../../vendor/merge-testnets"
 
-proc readBootstrapNodes*(path: string): seq[string] {.raises: [IOError, Defect].} =
+proc readBootstrapNodes*(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR values from a YAML file containing a flat list of entries
   if fileExists(path):
     splitLines(readFile(path)).
@@ -151,7 +151,7 @@ proc readBootstrapNodes*(path: string): seq[string] {.raises: [IOError, Defect].
   else:
     @[]
 
-proc readBootEnr*(path: string): seq[string] {.raises: [IOError, Defect].} =
+proc readBootEnr*(path: string): seq[string] {.raises: [IOError].} =
   # Read a list of ENR values from a YAML file containing a flat list of entries
   if fileExists(path):
     splitLines(readFile(path)).
@@ -161,7 +161,7 @@ proc readBootEnr*(path: string): seq[string] {.raises: [IOError, Defect].} =
     @[]
 
 proc loadEth2NetworkMetadata*(path: string, eth1Network = none(Eth1Network)): Eth2NetworkMetadata
-                             {.raises: [CatchableError, Defect].} =
+                             {.raises: [CatchableError].} =
   # Load data in eth2-networks format
   # https://github.com/eth-clients/eth2-networks
 
@@ -248,7 +248,7 @@ proc loadEth2NetworkMetadata*(path: string, eth1Network = none(Eth1Network)): Et
 
 proc loadCompileTimeNetworkMetadata(
     path: string,
-    eth1Network = none(Eth1Network)): Eth2NetworkMetadata {.raises: [Defect].} =
+    eth1Network = none(Eth1Network)): Eth2NetworkMetadata {.raises: [].} =
   try:
     result = loadEth2NetworkMetadata(path, eth1Network)
     if result.incompatible:
@@ -277,7 +277,7 @@ when not defined(gnosisChainBinary):
       for network in [mainnetMetadata, praterMetadata, ropstenMetadata, sepoliaMetadata]:
         checkForkConsistency(network.cfg)
 
-  proc getMetadataForNetwork*(networkName: string): Eth2NetworkMetadata {.raises: [Defect, IOError].} =
+  proc getMetadataForNetwork*(networkName: string): Eth2NetworkMetadata {.raises: [].} =
     template loadRuntimeMetadata: auto =
       if fileExists(networkName / "config.yaml"):
         try:
@@ -312,7 +312,7 @@ when not defined(gnosisChainBinary):
     metadata
 
   proc getRuntimeConfig*(
-      eth2Network: Option[string]): RuntimeConfig {.raises: [Defect, IOError].} =
+      eth2Network: Option[string]): RuntimeConfig {.raises: [IOError].} =
     if eth2Network.isSome:
       return getMetadataForNetwork(eth2Network.get).cfg
     defaultRuntimeConfig
@@ -338,5 +338,5 @@ else:
     gnosisMetadata.cfg
 
 proc extractGenesisValidatorRootFromSnapshot*(
-    snapshot: string): Eth2Digest {.raises: [Defect, IOError, SszError].} =
+    snapshot: string): Eth2Digest {.raises: [SszError].} =
   sszMount(snapshot, phase0.BeaconState).genesis_validators_root[]

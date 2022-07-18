@@ -894,19 +894,19 @@ proc defaultDataDir*[Conf](config: Conf): string =
 
   getHomeDir() / dataDir / "BeaconNode"
 
-func dumpDir(config: AnyConf): string =
+func dumpDir(config: AnyConf): string {.raises: [].} =
   config.dataDir / "dump"
 
-func dumpDirInvalid*(config: AnyConf): string =
+func dumpDirInvalid*(config: AnyConf): string {.raises: [].} =
   config.dumpDir / "invalid" # things that failed validation
 
-func dumpDirIncoming*(config: AnyConf): string =
+func dumpDirIncoming*(config: AnyConf): string {.raises: [].} =
   config.dumpDir / "incoming" # things that couldn't be validated (missingparent etc)
 
-func dumpDirOutgoing*(config: AnyConf): string =
+func dumpDirOutgoing*(config: AnyConf): string {.raises: [].} =
   config.dumpDir / "outgoing" # things we produced
 
-proc createDumpDirs*(config: BeaconNodeConf) =
+proc createDumpDirs*(config: BeaconNodeConf) {.raises: [].} =
   if config.dumpEnabled:
     if (let res = secureCreatePath(config.dumpDirInvalid); res.isErr):
       warn "Could not create dump directory",
@@ -919,17 +919,17 @@ proc createDumpDirs*(config: BeaconNodeConf) =
         path = config.dumpDirOutgoing, err = ioErrorMsg(res.error)
 
 func parseCmdArg*(T: type Eth2Digest, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [].} =
   Eth2Digest.fromHex(input)
 
-func completeCmdArg*(T: type Eth2Digest, input: string): seq[string] =
+func completeCmdArg*(T: type Eth2Digest, input: string): seq[string] {.raises: [].} =
   return @[]
 
 func parseCmdArg*(T: type GraffitiBytes, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   GraffitiBytes.init(input)
 
-func completeCmdArg*(T: type GraffitiBytes, input: string): seq[string] =
+func completeCmdArg*(T: type GraffitiBytes, input: string): seq[string] {.raises: [].} =
   return @[]
 
 func parseCmdArg*(T: type BlockHashOrNumber, input: string): T
@@ -940,18 +940,18 @@ func completeCmdArg*(T: type BlockHashOrNumber, input: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type Uri, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   parseUri(input)
 
-func completeCmdArg*(T: type Uri, input: string): seq[string] =
+func completeCmdArg*(T: type Uri, input: string): seq[string] {.raises: [].} =
   return @[]
 
 func parseCmdArg*(T: type PubKey0x, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   PubKey0x(hexToPaddedByteArray[RawPubKeySize](input))
 
 func parseCmdArg*(T: type ValidatorPubKey, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   let res = ValidatorPubKey.fromHex(input)
   if res.isErr(): raise (ref ValueError)(msg: $res.error())
   res.get()
@@ -960,7 +960,7 @@ func completeCmdArg*(T: type PubKey0x, input: string): seq[string] =
   return @[]
 
 func parseCmdArg*(T: type Checkpoint, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   let sepIdx = find(input, ':')
   if sepIdx == -1 or sepIdx == input.len - 1:
     raise newException(ValueError,
@@ -971,10 +971,10 @@ func parseCmdArg*(T: type Checkpoint, input: string): T
 
   T(root: root, epoch: parseBiggestUInt(input[sepIdx + 1 .. ^1]).Epoch)
 
-func completeCmdArg*(T: type Checkpoint, input: string): seq[string] =
+func completeCmdArg*(T: type Checkpoint, input: string): seq[string] {.raises: [].} =
   return @[]
 
-func isPrintable(rune: Rune): bool =
+func isPrintable(rune: Rune): bool {.raises: [].} =
   # This can be eventually replaced by the `unicodeplus` package, but a single
   # proc does not justify the extra dependencies at the moment:
   # https://github.com/nitely/nim-unicodeplus
@@ -982,7 +982,7 @@ func isPrintable(rune: Rune): bool =
   rune == Rune(0x20) or unicodeCategory(rune) notin ctgC+ctgZ
 
 func parseCmdArg*(T: type WalletName, input: string): T
-                 {.raises: [ValueError, Defect].} =
+                 {.raises: [ValueError].} =
   if input.len == 0:
     raise newException(ValueError, "The wallet name should not be empty")
   if input[0] == '_':
@@ -996,15 +996,15 @@ func parseCmdArg*(T: type WalletName, input: string): T
   # (see UTR #36 http://www.unicode.org/reports/tr36/)
   return T(toNFKC(input))
 
-func completeCmdArg*(T: type WalletName, input: string): seq[string] =
+func completeCmdArg*(T: type WalletName, input: string): seq[string] {.raises: [].} =
   return @[]
 
 proc parseCmdArg*(T: type enr.Record, p: string): T
-    {.raises: [ConfigurationError, Defect].} =
+    {.raises: [ConfigurationError].} =
   if not fromURI(result, p):
     raise newException(ConfigurationError, "Invalid ENR")
 
-func completeCmdArg*(T: type enr.Record, val: string): seq[string] =
+func completeCmdArg*(T: type enr.Record, val: string): seq[string] {.raises: [].} =
   return @[]
 
 func validatorsDir*[Conf](config: Conf): string =
@@ -1013,13 +1013,13 @@ func validatorsDir*[Conf](config: Conf): string =
 func secretsDir*[Conf](config: Conf): string =
   string config.secretsDirFlag.get(InputDir(config.dataDir / "secrets"))
 
-func walletsDir*(config: BeaconNodeConf): string =
+func walletsDir*(config: BeaconNodeConf): string {.raises: [].} =
   if config.walletsDirFlag.isSome:
     config.walletsDirFlag.get.string
   else:
     config.dataDir / "wallets"
 
-func outWalletName*(config: BeaconNodeConf): Option[WalletName] =
+func outWalletName*(config: BeaconNodeConf): Option[WalletName] {.raises: [].} =
   proc fail {.noreturn.} =
     raiseAssert "outWalletName should be used only in the right context"
 
@@ -1036,7 +1036,7 @@ func outWalletName*(config: BeaconNodeConf): Option[WalletName] =
   else:
     fail()
 
-func outWalletFile*(config: BeaconNodeConf): Option[OutFile] =
+func outWalletFile*(config: BeaconNodeConf): Option[OutFile] {.raises: [].} =
   proc fail {.noreturn.} =
     raiseAssert "outWalletName should be used only in the right context"
 
@@ -1056,7 +1056,7 @@ func outWalletFile*(config: BeaconNodeConf): Option[OutFile] =
 func databaseDir*(config: AnyConf): string =
   config.dataDir / "db"
 
-func runAsService*(config: BeaconNodeConf): bool =
+func runAsService*(config: BeaconNodeConf): bool {.raises: [].} =
   config.cmd == noCommand and config.runAsServiceFlag
 
 func eraDir*(config: AnyConf): string =
@@ -1074,31 +1074,31 @@ template raiseUnexpectedValue(r: var TomlReader, msg: string) =
   raise newException(SerializationError, msg)
 
 proc readValue*(r: var TomlReader, value: var Epoch)
-               {.raises: [Defect, SerializationError, IOError].} =
+               {.raises: [SerializationError, IOError].} =
   value = Epoch r.parseInt(uint64)
 
 proc readValue*(r: var TomlReader, value: var GraffitiBytes)
-               {.raises: [Defect, SerializationError, IOError].} =
+               {.raises: [SerializationError, IOError].} =
   try:
     value = GraffitiBytes.init(r.readValue(string))
   except ValueError as err:
     r.raiseUnexpectedValue("A printable string or 0x-prefixed hex-encoded raw bytes expected")
 
 proc readValue*(r: var TomlReader, val: var NatConfig)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   val = try: parseCmdArg(NatConfig, r.readValue(string))
         except CatchableError as err:
           raise newException(SerializationError, err.msg)
 
 proc readValue*(r: var TomlReader, a: var Eth2Digest)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   try:
     a = fromHex(type(a), r.readValue(string))
   except ValueError:
     r.raiseUnexpectedValue("Hex string expected")
 
 proc readValue*(reader: var TomlReader, value: var ValidatorPubKey)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   let keyAsString = try:
     reader.readValue(string)
   except CatchableError:
@@ -1112,21 +1112,21 @@ proc readValue*(reader: var TomlReader, value: var ValidatorPubKey)
     raiseUnexpectedValue(reader, "Valid hex-encoded public key expected")
 
 proc readValue*(r: var TomlReader, a: var PubKey0x)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   try:
     a = parseCmdArg(PubKey0x, r.readValue(string))
   except CatchableError:
     r.raiseUnexpectedValue("a 0x-prefixed hex-encoded string expected")
 
 proc readValue*(r: var TomlReader, a: var WalletName)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   try:
     a = parseCmdArg(WalletName, r.readValue(string))
   except CatchableError:
     r.raiseUnexpectedValue("string expected")
 
 proc readValue*(r: var TomlReader, a: var Address)
-               {.raises: [Defect, IOError, SerializationError].} =
+               {.raises: [IOError, SerializationError].} =
   try:
     a = parseCmdArg(Address, r.readValue(string))
   except CatchableError:
@@ -1134,7 +1134,7 @@ proc readValue*(r: var TomlReader, a: var Address)
 
 proc loadEth2Network*(
     eth2Network: Option[string]
-): Eth2NetworkMetadata {.raises: [Defect, IOError].} =
+): Eth2NetworkMetadata {.raises: [IOError].} =
   network_name.set(2, labelValues = [eth2Network.get(otherwise = "mainnet")])
   when not defined(gnosisChainBinary):
     if eth2Network.isSome:
@@ -1158,7 +1158,7 @@ proc loadJwtSecret*(
     rng: var HmacDrbgContext,
     dataDir: string,
     jwtSecret: Option[string],
-    allowCreate: bool): Option[seq[byte]] =
+    allowCreate: bool): Option[seq[byte]] {.raises: [].} =
   # Some Web3 endpoints aren't compatible with JWT, but if explicitly chosen,
   # use it regardless.
   if jwtSecret.isSome or allowCreate:

@@ -94,7 +94,7 @@ template isSupportedBySQLite(period: SyncCommitteePeriod): bool =
 
 proc initCurrentBranchesStore(
     backend: SqStoreRef,
-    name: string): KvResult[CurrentSyncCommitteeBranchStore] =
+    name: string): KvResult[CurrentSyncCommitteeBranchStore] {.raises: [].} =
   ? backend.exec("""
     CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `slot` INTEGER PRIMARY KEY,  -- `Slot` (up through 2^63-1)
@@ -136,7 +136,7 @@ func close(store: CurrentSyncCommitteeBranchStore) =
   store.keepFromStmt.dispose()
 
 func hasCurrentSyncCommitteeBranch*(
-    db: LightClientDataDB, slot: Slot): bool =
+    db: LightClientDataDB, slot: Slot): bool {.raises: [].} =
   if not slot.isSupportedBySQLite:
     return false
   var exists: int64
@@ -147,7 +147,7 @@ func hasCurrentSyncCommitteeBranch*(
   false
 
 proc getCurrentSyncCommitteeBranch*(
-    db: LightClientDataDB, slot: Slot): altair.CurrentSyncCommitteeBranch =
+    db: LightClientDataDB, slot: Slot): altair.CurrentSyncCommitteeBranch {.raises: [].} =
   if not slot.isSupportedBySQLite:
     return default(altair.CurrentSyncCommitteeBranch)
   var branch: seq[byte]
@@ -162,7 +162,7 @@ proc getCurrentSyncCommitteeBranch*(
 
 func putCurrentSyncCommitteeBranch*(
     db: LightClientDataDB, slot: Slot,
-    branch: altair.CurrentSyncCommitteeBranch) =
+    branch: altair.CurrentSyncCommitteeBranch) {.raises: [].} =
   if not slot.isSupportedBySQLite:
     return
   let res = db.currentBranches.putStmt.exec((slot.int64, SSZ.encode(branch)))
@@ -170,7 +170,7 @@ func putCurrentSyncCommitteeBranch*(
 
 proc initBestUpdatesStore(
     backend: SqStoreRef,
-    name: string): KvResult[BestLightClientUpdateStore] =
+    name: string): KvResult[BestLightClientUpdateStore] {.raises: [].} =
   ? backend.exec("""
     CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `period` INTEGER PRIMARY KEY,  -- `SyncCommitteePeriod`
@@ -209,7 +209,7 @@ proc initBestUpdatesStore(
     delFromStmt: delFromStmt,
     keepFromStmt: keepFromStmt)
 
-func close(store: BestLightClientUpdateStore) =
+func close(store: BestLightClientUpdateStore) {.raises: [].} =
   store.getStmt.dispose()
   store.putStmt.dispose()
   store.delStmt.dispose()
@@ -245,14 +245,14 @@ func putBestUpdate*(
 
 proc putUpdateIfBetter*(
     db: LightClientDataDB, period: SyncCommitteePeriod,
-    update: altair.LightClientUpdate) =
+    update: altair.LightClientUpdate) {.raises: [].} =
   let existing = db.getBestUpdate(period)
   if is_better_update(update, existing):
     db.putBestUpdate(period, update)
 
 proc initSealedPeriodsStore(
     backend: SqStoreRef,
-    name: string): KvResult[SealedSyncCommitteePeriodStore] =
+    name: string): KvResult[SealedSyncCommitteePeriodStore] {.raises: [].} =
   ? backend.exec("""
     CREATE TABLE IF NOT EXISTS `""" & name & """` (
       `period` INTEGER PRIMARY KEY  -- `SyncCommitteePeriod`
@@ -285,14 +285,14 @@ proc initSealedPeriodsStore(
     delFromStmt: delFromStmt,
     keepFromStmt: keepFromStmt)
 
-func close(store: SealedSyncCommitteePeriodStore) =
+func close(store: SealedSyncCommitteePeriodStore) {.raises: [].} =
   store.containsStmt.dispose()
   store.putStmt.dispose()
   store.delFromStmt.dispose()
   store.keepFromStmt.dispose()
 
 func isPeriodSealed*(
-    db: LightClientDataDB, period: SyncCommitteePeriod): bool =
+    db: LightClientDataDB, period: SyncCommitteePeriod): bool {.raises: [].} =
   doAssert period.isSupportedBySQLite
   var exists: int64
   for res in db.sealedPeriods.containsStmt.exec(period.int64, exists):
@@ -302,13 +302,13 @@ func isPeriodSealed*(
   false
 
 func sealPeriod*(
-    db: LightClientDataDB, period: SyncCommitteePeriod) =
+    db: LightClientDataDB, period: SyncCommitteePeriod) {.raises: [].} =
   doAssert period.isSupportedBySQLite
   let res = db.sealedPeriods.putStmt.exec(period.int64)
   res.expect("SQL query OK")
 
 func delPeriodsFrom*(
-    db: LightClientDataDB, minPeriod: SyncCommitteePeriod) =
+    db: LightClientDataDB, minPeriod: SyncCommitteePeriod) {.raises: [].} =
   doAssert minPeriod.isSupportedBySQLite
   let res1 = db.sealedPeriods.delFromStmt.exec(minPeriod.int64)
   res1.expect("SQL query OK")
@@ -316,7 +316,7 @@ func delPeriodsFrom*(
   res2.expect("SQL query OK")
 
 func keepPeriodsFrom*(
-    db: LightClientDataDB, minPeriod: SyncCommitteePeriod) =
+    db: LightClientDataDB, minPeriod: SyncCommitteePeriod) {.raises: [].} =
   doAssert minPeriod.isSupportedBySQLite
   let res1 = db.sealedPeriods.keepFromStmt.exec(minPeriod.int64)
   res1.expect("SQL query OK")
@@ -334,7 +334,7 @@ type LightClientDataDBNames* = object
 
 proc initLightClientDataDB*(
     backend: SqStoreRef,
-    names: LightClientDataDBNames): KvResult[LightClientDataDB] =
+    names: LightClientDataDBNames): KvResult[LightClientDataDB] {.raises: [].} =
   let
     currentBranches =
       ? backend.initCurrentBranchesStore(names.altairCurrentBranches)
@@ -349,7 +349,7 @@ proc initLightClientDataDB*(
     bestUpdates: bestUpdates,
     sealedPeriods: sealedPeriods)
 
-proc close*(db: LightClientDataDB) =
+proc close*(db: LightClientDataDB) {.raises: [].} =
   if db.backend != nil:
     db.currentBranches.close()
     db.bestUpdates.close()

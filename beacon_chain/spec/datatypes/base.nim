@@ -526,7 +526,7 @@ const
   DOMAIN_SYNC_COMMITTEE_SELECTION_PROOF* = DomainType([byte 0x08, 0x00, 0x00, 0x00])
   DOMAIN_CONTRIBUTION_AND_PROOF* = DomainType([byte 0x09, 0x00, 0x00, 0x00])
 
-func getImmutableValidatorData*(validator: Validator): ImmutableValidatorData2 =
+func getImmutableValidatorData*(validator: Validator): ImmutableValidatorData2 {.raises: [].} =
   let cookedKey = validator.pubkey.load() # Loading the pubkey is slow!
   doAssert cookedKey.isSome,
     "Cannot parse validator key: " & toHex(validator.pubkey)
@@ -615,7 +615,7 @@ static: doAssert high(int) >= high(int32)
 makeLimitedU64(ValidatorIndex, validatorIndexLimit)
 
 func init*(T: type CommitteeIndex, index, committees_per_slot: uint64):
-    Result[CommitteeIndex, cstring] =
+    Result[CommitteeIndex, cstring] {.raises: [].} =
   if index < min(committees_per_slot, MAX_COMMITTEES_PER_SLOT):
     ok(CommitteeIndex(index))
   else:
@@ -627,14 +627,14 @@ template writeValue*(
 
 proc readValue*(
     reader: var JsonReader, value: var (Version | ForkDigest | DomainType))
-               {.raises: [IOError, SerializationError, Defect].} =
+               {.raises: [IOError, SerializationError].} =
   let hex = reader.readValue(string)
   try:
     hexToByteArray(hex, distinctBase(value))
   except ValueError:
     raiseUnexpectedValue(reader, "Hex string of 4 bytes expected")
 
-func `$`*(x: JustificationBits): string =
+func `$`*(x: JustificationBits): string {.raises: [].} =
   "0x" & toHex(uint8(x))
 
 proc readValue*(reader: var JsonReader, value: var JustificationBits)
@@ -646,7 +646,7 @@ proc readValue*(reader: var JsonReader, value: var JustificationBits)
     raiseUnexpectedValue(reader, "Hex string of 1 byte expected")
 
 proc writeValue*(writer: var JsonWriter, value: JustificationBits)
-    {.raises: [IOError, Defect].} =
+    {.raises: [IOError].} =
   writer.writeValue $value
 
 # `ValidatorIndex` seq handling.
@@ -657,19 +657,19 @@ template `[]`*[T](a: seq[T], b: ValidatorIndex): auto = # Also var seq (!)
   a[b.int]
 
 iterator vindices*(
-    a: HashList[Validator, Limit VALIDATOR_REGISTRY_LIMIT]): ValidatorIndex =
+    a: HashList[Validator, Limit VALIDATOR_REGISTRY_LIMIT]): ValidatorIndex {.raises: [].} =
   for i in 0..<a.len():
     yield i.ValidatorIndex
 
 iterator vindices*(
-    a: List[Validator, Limit VALIDATOR_REGISTRY_LIMIT]): ValidatorIndex =
+    a: List[Validator, Limit VALIDATOR_REGISTRY_LIMIT]): ValidatorIndex {.raises: [].} =
   for i in 0..<a.len():
     yield i.ValidatorIndex
 
 template `==`*(x, y: JustificationBits): bool =
   distinctBase(x) == distinctBase(y)
 
-func `as`*(d: DepositData, T: type DepositMessage): T =
+func `as`*(d: DepositData, T: type DepositMessage): T {.raises: [].} =
   T(pubkey: d.pubkey,
     withdrawal_credentials: d.withdrawal_credentials,
     amount: d.amount)
@@ -699,30 +699,30 @@ template newClone*[T](x: ref T not nil): ref T =
 template lenu64*(x: untyped): untyped =
   uint64(len(x))
 
-func `$`*(v: ForkDigest | Version | DomainType): string =
+func `$`*(v: ForkDigest | Version | DomainType): string {.raises: [].} =
   toHex(distinctBase(v))
 
-func toGaugeValue*(x: uint64 | Epoch | Slot): int64 =
+func toGaugeValue*(x: uint64 | Epoch | Slot): int64 {.raises: [].} =
   if x > uint64(int64.high):
     int64.high
   else:
     int64(x)
 
 # TODO where's borrow support when you need it
-func `==`*(a, b: ForkDigest | Version | DomainType): bool =
+func `==`*(a, b: ForkDigest | Version | DomainType): bool {.raises: [].} =
   array[4, byte](a) == array[4, byte](b)
-func `<`*(a, b: ForkDigest | Version): bool =
+func `<`*(a, b: ForkDigest | Version): bool {.raises: [].} =
   uint32.fromBytesBE(array[4, byte](a)) < uint32.fromBytesBE(array[4, byte](b))
-func len*(v: ForkDigest | Version | DomainType): int = sizeof(v)
-func low*(v: ForkDigest | Version): int = 0
-func high*(v: ForkDigest | Version): int = len(v) - 1
-func `[]`*(v: ForkDigest | Version | DomainType, idx: int): byte =
+func len*(v: ForkDigest | Version | DomainType): int {.raises: [].} = sizeof(v)
+func low*(v: ForkDigest | Version): int {.raises: [].} = 0
+func high*(v: ForkDigest | Version): int {.raises: [].} = len(v) - 1
+func `[]`*(v: ForkDigest | Version | DomainType, idx: int): byte {.raises: [].} =
   array[4, byte](v)[idx]
 
 template data*(v: ForkDigest | Version | DomainType): array[4, byte] =
   distinctBase(v)
 
-func shortLog*(v: BeaconBlockHeader): auto =
+func shortLog*(v: BeaconBlockHeader): auto {.raises: [].} =
   (
     slot: shortLog(v.slot),
     proposer_index: v.proposer_index,
@@ -730,13 +730,13 @@ func shortLog*(v: BeaconBlockHeader): auto =
     state_root: shortLog(v.state_root)
   )
 
-func shortLog*(v: SomeSignedBeaconBlockHeader): auto =
+func shortLog*(v: SomeSignedBeaconBlockHeader): auto {.raises: [].} =
   (
     message: shortLog(v.message),
     signature: shortLog(v.signature)
   )
 
-func shortLog*(v: DepositData): auto =
+func shortLog*(v: DepositData): auto {.raises: [].} =
   (
     pubkey: shortLog(v.pubkey),
     withdrawal_credentials: shortLog(v.withdrawal_credentials),
@@ -744,11 +744,11 @@ func shortLog*(v: DepositData): auto =
     signature: shortLog(v.signature)
   )
 
-func shortLog*(v: Checkpoint): auto =
+func shortLog*(v: Checkpoint): auto {.raises: [].} =
   # epoch:root when logging epoch, root:slot when logging slot!
   $shortLog(v.epoch) & ":" & shortLog(v.root)
 
-func shortLog*(v: AttestationData): auto =
+func shortLog*(v: AttestationData): auto {.raises: [].} =
   (
     slot: shortLog(v.slot),
     index: v.index,
@@ -757,7 +757,7 @@ func shortLog*(v: AttestationData): auto =
     target: shortLog(v.target),
   )
 
-func shortLog*(v: PendingAttestation): auto =
+func shortLog*(v: PendingAttestation): auto {.raises: [].} =
   (
     aggregation_bits: v.aggregation_bits,
     data: shortLog(v.data),
@@ -765,7 +765,7 @@ func shortLog*(v: PendingAttestation): auto =
     proposer_index: v.proposer_index
   )
 
-func shortLog*(v: SomeAttestation): auto =
+func shortLog*(v: SomeAttestation): auto {.raises: [].} =
   (
     aggregation_bits: v.aggregation_bits,
     data: shortLog(v.data),
@@ -775,14 +775,14 @@ func shortLog*(v: SomeAttestation): auto =
 template asTrusted*(x: Attestation): TrustedAttestation =
   isomorphicCast[TrustedAttestation](x)
 
-func shortLog*(v: SomeIndexedAttestation): auto =
+func shortLog*(v: SomeIndexedAttestation): auto {.raises: [].} =
   (
     attestating_indices: v.attesting_indices,
     data: shortLog(v.data),
     signature: shortLog(v.signature)
   )
 
-iterator getValidatorIndices*(attester_slashing: SomeAttesterSlashing): uint64 =
+iterator getValidatorIndices*(attester_slashing: SomeAttesterSlashing): uint64 {.raises: [].} =
   template attestation_1(): auto = attester_slashing.attestation_1
   template attestation_2(): auto = attester_slashing.attestation_2
 
@@ -792,25 +792,25 @@ iterator getValidatorIndices*(attester_slashing: SomeAttesterSlashing): uint64 =
       continue
     yield validator_index
 
-func shortLog*(v: SomeAttesterSlashing): auto =
+func shortLog*(v: SomeAttesterSlashing): auto {.raises: [].} =
   (
     attestation_1: shortLog(v.attestation_1),
     attestation_2: shortLog(v.attestation_2),
   )
 
-func shortLog*(v: SomeProposerSlashing): auto =
+func shortLog*(v: SomeProposerSlashing): auto {.raises: [].} =
   (
     signed_header_1: shortLog(v.signed_header_1),
     signed_header_2: shortLog(v.signed_header_2)
   )
 
-func shortLog*(v: VoluntaryExit): auto =
+func shortLog*(v: VoluntaryExit): auto {.raises: [].} =
   (
     epoch: shortLog(v.epoch),
     validator_index: v.validator_index
   )
 
-func shortLog*(v: SomeSignedVoluntaryExit): auto =
+func shortLog*(v: SomeSignedVoluntaryExit): auto {.raises: [].} =
   (
     message: shortLog(v.message),
     signature: shortLog(v.signature)
@@ -824,7 +824,7 @@ const
   # http://facweb.cs.depaul.edu/sjost/it212/documents/ascii-pr.htm
   PrintableAsciiChars = {' '..'~'}
 
-func toPrettyString*(bytes: openArray[byte]): string =
+func toPrettyString*(bytes: openArray[byte]): string {.raises: [].} =
   result = strip(string.fromBytes(bytes),
                  leading = false,
                  chars = Whitespace + {'\0'})
@@ -833,10 +833,10 @@ func toPrettyString*(bytes: openArray[byte]): string =
   if not allCharsInSet(result, PrintableAsciiChars):
     result = "0x" & toHex(bytes)
 
-func `$`*(value: GraffitiBytes): string = toPrettyString(distinctBase value)
+func `$`*(value: GraffitiBytes): string {.raises: [].} = toPrettyString(distinctBase value)
 
 func init*(T: type GraffitiBytes, input: string): GraffitiBytes
-          {.raises: [ValueError, Defect].} =
+          {.raises: [ValueError].} =
   if input.len > 2 and input[0] == '0' and input[1] == 'x':
     if input.len > sizeof(GraffitiBytes) * 2 + 2:
       raise newException(ValueError, "The graffiti bytes should be less than 32")
@@ -854,7 +854,7 @@ func init*(
     indices_in_committee: openArray[uint64],
     committee_len: int,
     data: AttestationData,
-    signature: ValidatorSig): Result[T, cstring] =
+    signature: ValidatorSig): Result[T, cstring] {.raises: [].} =
   var bits = CommitteeValidatorsBits.init(committee_len)
   for index_in_committee in indices_in_committee:
     if index_in_committee >= committee_len.uint64: return err("Invalid index for committee")
@@ -866,14 +866,14 @@ func init*(
     signature: signature
   )
 
-func defaultGraffitiBytes*(): GraffitiBytes =
+func defaultGraffitiBytes*(): GraffitiBytes {.raises: [].} =
   const graffitiBytes =
     toBytes("Nimbus/" & fullVersionStr)
   static: doAssert graffitiBytes.len <= MAX_GRAFFITI_SIZE
   distinctBase(result)[0 ..< graffitiBytes.len] = graffitiBytes
 
 proc writeValue*(w: var JsonWriter, value: GraffitiBytes)
-                {.raises: [IOError, Defect].} =
+                {.raises: [IOError].} =
   w.writeValue $value
 
 template `==`*(lhs, rhs: GraffitiBytes): bool =
@@ -888,7 +888,7 @@ proc readValue*(r: var JsonReader, T: type GraffitiBytes): T
 
 func load*(
     validators: openArray[ImmutableValidatorData2],
-    index: ValidatorIndex | uint64): Option[CookedPubKey] =
+    index: ValidatorIndex | uint64): Option[CookedPubKey] {.raises: [].} =
   if validators.lenu64() <= index.uint64:
     none(CookedPubKey)
   else:
@@ -903,7 +903,7 @@ static:
   doAssert supportsCopyMem(Eth2Digest)
   doAssert ATTESTATION_SUBNET_COUNT <= high(distinctBase SubnetId).int
 
-func getSizeofSig(x: auto, n: int = 0): seq[(string, int, int)] =
+func getSizeofSig(x: auto, n: int = 0): seq[(string, int, int)] {.raises: [].} =
   for name, value in x.fieldPairs:
     when value is tuple|object:
       result.add getSizeofSig(value, n + 1)
@@ -926,7 +926,7 @@ template isomorphicCast*[T, U](x: U): T =
     doAssert getSizeofSig(T()) == getSizeofSig(U())
   cast[ptr T](unsafeAddr x)[]
 
-func prune*(cache: var StateCache, epoch: Epoch) =
+func prune*(cache: var StateCache, epoch: Epoch) {.raises: [].} =
   # Prune all cache information that is no longer relevant in order to process
   # the given epoch
   if epoch < 2: return
@@ -959,12 +959,12 @@ func prune*(cache: var StateCache, epoch: Epoch) =
       cache.sync_committees.del drop.sync_committee_period
     drops.setLen(0)
 
-func clear*(cache: var StateCache) =
+func clear*(cache: var StateCache) {.raises: [].} =
   cache.shuffled_active_validator_indices.clear
   cache.beacon_proposer_indices.clear
   cache.sync_committees.clear
 
-func checkForkConsistency*(cfg: RuntimeConfig) =
+func checkForkConsistency*(cfg: RuntimeConfig) {.raises: [].} =
   doAssert cfg.CAPELLA_FORK_EPOCH == FAR_FUTURE_EPOCH
   doAssert cfg.SHARDING_FORK_EPOCH == FAR_FUTURE_EPOCH
 

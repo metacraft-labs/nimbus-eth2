@@ -47,25 +47,25 @@ const
 template eth2Prefix(forkDigest: ForkDigest): string =
   "/eth2/" & $forkDigest & "/"
 
-func getBeaconBlocksTopic*(forkDigest: ForkDigest): string =
+func getBeaconBlocksTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   eth2Prefix(forkDigest) & topicBeaconBlocksSuffix
 
-func getVoluntaryExitsTopic*(forkDigest: ForkDigest): string =
+func getVoluntaryExitsTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   eth2Prefix(forkDigest) & topicVoluntaryExitsSuffix
 
-func getProposerSlashingsTopic*(forkDigest: ForkDigest): string =
+func getProposerSlashingsTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   eth2Prefix(forkDigest) & topicProposerSlashingsSuffix
 
-func getAttesterSlashingsTopic*(forkDigest: ForkDigest): string =
+func getAttesterSlashingsTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   eth2Prefix(forkDigest) & topicAttesterSlashingsSuffix
 
-func getAggregateAndProofsTopic*(forkDigest: ForkDigest): string =
+func getAggregateAndProofsTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   eth2Prefix(forkDigest) & topicAggregateAndProofsSuffix
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/validator.md#broadcast-attestation
 func compute_subnet_for_attestation*(
     committees_per_slot: uint64, slot: Slot, committee_index: CommitteeIndex):
-    SubnetId =
+    SubnetId {.raises: [].} =
   # Compute the correct subnet for an attestation for Phase 0.
   # Note, this mimics expected Phase 1 behavior where attestations will be
   # mapped to their shard subnet.
@@ -80,34 +80,34 @@ func compute_subnet_for_attestation*(
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/validator.md#broadcast-attestation
 func getAttestationTopic*(forkDigest: ForkDigest,
-                          subnetId: SubnetId): string =
+                          subnetId: SubnetId): string {.raises: [].} =
   ## For subscribing and unsubscribing to/from a subnet.
   eth2Prefix(forkDigest) & "beacon_attestation_" & $(subnetId) & "/ssz_snappy"
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/p2p-interface.md#topics-and-messages
 func getSyncCommitteeTopic*(forkDigest: ForkDigest,
-                            subcommitteeIdx: SyncSubcommitteeIndex): string =
+                            subcommitteeIdx: SyncSubcommitteeIndex): string {.raises: [].} =
   ## For subscribing and unsubscribing to/from a subnet.
   eth2Prefix(forkDigest) & "sync_committee_" & $subcommitteeIdx & "/ssz_snappy"
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/p2p-interface.md#topics-and-messages
-func getSyncCommitteeContributionAndProofTopic*(forkDigest: ForkDigest): string =
+func getSyncCommitteeContributionAndProofTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   ## For subscribing and unsubscribing to/from a subnet.
   eth2Prefix(forkDigest) & "sync_committee_contribution_and_proof/ssz_snappy"
 
 # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#light_client_finality_update
-func getLightClientFinalityUpdateTopic*(forkDigest: ForkDigest): string =
+func getLightClientFinalityUpdateTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   ## For broadcasting or obtaining the latest `LightClientFinalityUpdate`.
   eth2Prefix(forkDigest) & "light_client_finality_update_v0/ssz_snappy"
 
 # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#light_client_optimistic_update
-func getLightClientOptimisticUpdateTopic*(forkDigest: ForkDigest): string =
+func getLightClientOptimisticUpdateTopic*(forkDigest: ForkDigest): string {.raises: [].} =
   ## For broadcasting or obtaining the latest `LightClientOptimisticUpdate`.
   eth2Prefix(forkDigest) & "light_client_optimistic_update_v0/ssz_snappy"
 
 func getENRForkID*(cfg: RuntimeConfig,
                    epoch: Epoch,
-                   genesis_validators_root: Eth2Digest): ENRForkID =
+                   genesis_validators_root: Eth2Digest): ENRForkID {.raises: [].} =
   let
     current_fork_version = cfg.forkVersionAtEpoch(epoch)
     next_fork_version = if cfg.nextForkEpochAtEpoch(epoch) == FAR_FUTURE_EPOCH:
@@ -123,7 +123,7 @@ func getENRForkID*(cfg: RuntimeConfig,
 
 func getDiscoveryForkID*(cfg: RuntimeConfig,
                    epoch: Epoch,
-                   genesis_validators_root: Eth2Digest): ENRForkID =
+                   genesis_validators_root: Eth2Digest): ENRForkID {.raises: [].} =
   # Until 1 epoch from fork, returns pre-fork value
   if epoch + 1 >= cfg.ALTAIR_FORK_EPOCH:
     getENRForkID(cfg, epoch, genesis_validators_root)
@@ -141,7 +141,7 @@ func getDiscoveryForkID*(cfg: RuntimeConfig,
 type GossipState* = set[BeaconStateFork]
 func getTargetGossipState*(
     epoch, ALTAIR_FORK_EPOCH, BELLATRIX_FORK_EPOCH: Epoch, isBehind: bool):
-    GossipState =
+    GossipState {.raises: [].} =
   if isBehind:
     {}
 
@@ -179,7 +179,7 @@ func getTargetGossipState*(
   else:
     raiseAssert "Unknown target gossip state"
 
-func nearSyncCommitteePeriod*(epoch: Epoch): Option[uint64] =
+func nearSyncCommitteePeriod*(epoch: Epoch): Option[uint64] {.raises: [].} =
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/validator.md#sync-committee-subnet-stability
   if epoch.is_sync_committee_period():
     return some 0'u64
@@ -193,7 +193,7 @@ func nearSyncCommitteePeriod*(epoch: Epoch): Option[uint64] =
 func getSyncSubnets*(
     nodeHasPubkey: proc(pubkey: ValidatorPubKey):
       bool {.noSideEffect, raises: [Defect].},
-    syncCommittee: SyncCommittee): SyncnetBits =
+    syncCommittee: SyncCommittee): SyncnetBits {.raises: [].} =
   var res: SyncnetBits
   for i, pubkey in syncCommittee.pubkeys:
     if not nodeHasPubkey(pubkey):
