@@ -67,7 +67,7 @@ type LightClientConf* = object
   listenAddress* {.
     desc: "Listening address for the Ethereum LibP2P and Discovery v5 traffic"
     defaultValue: defaultListenAddress
-    defaultValueDesc: "0.0.0.0"
+    defaultValueDesc: defaultListenAddressDesc
     name: "listen-address" .}: ValidIpAddress
 
   tcpPort* {.
@@ -138,6 +138,26 @@ type LightClientConf* = object
     desc: "Modify SAFE_SLOTS_TO_IMPORT_OPTIMISTICALLY"
     defaultValue: 128
     name: "safe-slots-to-import-optimistically" .}: uint16
+
+  # RPC
+  rpcEnabled* {.
+    desc: "Enable the JSON-RPC server"
+    name: "rpc" .}: Option[bool]
+
+  rpcPort* {.
+    desc: "HTTP port for the JSON-RPC server"
+    defaultValue: 8545
+    name: "rpc-port" .}: Port
+
+  rpcAddress* {.
+    desc: "Listening address of the RPC server"
+    defaultValue: defaultAdminListenAddress
+    defaultValueDesc: $defaultAdminListenAddressDesc
+    name: "rpc-address" .}: ValidIpAddress
+
+  proxyUri* {.
+    desc: "URI of eth client where to proxy unimplemented rpc methods to"
+    name: "proxy-uri" .}: Option[string]
 
   # Testing
   stopAtEpoch* {.

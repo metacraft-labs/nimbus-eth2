@@ -9,10 +9,11 @@
 # protocol. See https://github.com/ethereum/consensus-specs/pull/2802
 
 import
-  std/os,
+  std/[os, strutils],
   chronicles, chronicles/chronos_tools, chronos,
   eth/keys,
   ./eth1/eth1_monitor,
+  ./rpc/rpc_eth_api_light_client,
   ./spec/beaconstate,
   ./sync/optimistic_sync_light_client,
   "."/[light_client, nimbus_binary_common, version]
@@ -68,24 +69,72 @@ programMain:
       else:
         nil
 
+    rpcServerWithProxy =
+      if config.rpcEnabled.get(config.web3Urls.len > 0):
+        let proxyUri =
+          if config.proxyUri.isSome:
+            config.proxyUri
+          elif config.web3Urls.len > 0:
+            var web3Url = config.web3Urls[0]
+            fixupWeb3Urls web3Url
+            some web3Url
+          else:
+            none(string)
+        if proxyUri.isSome:
+          info "Initializing LC eth API proxy", proxyUri = proxyUri.get
+          let
+            ta = initTAddress(config.rpcAddress, config.rpcPort)
+            clientConfig =
+              case parseUri(proxyUri.get).scheme.toLowerAscii():
+              of "http", "https":
+                getHttpClientConfig(proxyUri.get)
+              of "ws", "wss":
+                getWebSocketClientConfig(proxyUri.get)
+              else:
+                fatal "Unsupported scheme", proxyUri = proxyUri.get
+                quit QuitFailure
+          RpcProxy.new([ta], clientConfig)
+        else:
+          warn "Ignoring `rpcEnabled`, no `proxyUri` provided",
+            rpcEnabled = config.rpcEnabled, proxyUri = config.proxyUri
+          nil
+      else:
+        if config.proxyUri.isSome:
+          warn "Ignoring `proxyUri`, RPC not enabled",
+            rpcEnabled = config.rpcEnabled, proxyUri = config.proxyUri
+        nil
+
+    lcProxy =
+      if rpcServerWithProxy != nil:
+        let res = LightClientRpcProxy(proxy: rpcServerWithProxy)
+        res.installEthApiHandlers()
+        res
+      else:
+        nil
+
     optimisticProcessor = proc(signedBlock: ForkedMsgTrustedSignedBeaconBlock):
         Future[void] {.async.} =
-      debug "New LC optimistic block",
+      notice "New LC optimistic block",
         opt = signedBlock.toBlockId(),
         wallSlot = getBeaconTime().slotOrZero
       withBlck(signedBlock):
         when stateFork >= BeaconStateFork.Bellatrix:
           if blck.message.is_execution_block:
-            await eth1Monitor.ensureDataProvider()
-
-            # engine_newPayloadV1
             template payload(): auto = blck.message.body.execution_payload
-            discard await eth1Monitor.newExecutionPayload(payload)
 
-            # engine_forkchoiceUpdatedV1
-            discard await eth1Monitor.runForkchoiceUpdated(
-              headBlockRoot = payload.block_hash,
-              finalizedBlockRoot = ZERO_HASH)
+            if eth1Monitor != nil:
+              await eth1Monitor.ensureDataProvider()
+
+              # engine_newPayloadV1
+              discard await eth1Monitor.newExecutionPayload(payload)
+
+              # engine_forkchoiceUpdatedV1
+              discard await eth1Monitor.runForkchoiceUpdated(
+                headBlockRoot = payload.block_hash,
+                finalizedBlockRoot = ZERO_HASH)
+
+            if lcProxy != nil:
+              lcProxy.blockNumber.ok payload.block_number.toBlockNumber
         else: discard
       return
     optSync = initLCOptimisticSync(
@@ -102,12 +151,15 @@ programMain:
   waitFor network.startListening()
   waitFor network.start()
 
+  if lcProxy != nil:
+    waitFor lcProxy.proxy.start()
+
   proc shouldSyncOptimistically(slot: Slot): bool =
     const
       # Maximum age of light client optimistic header to use optimistic sync
       maxAge = 2 * SLOTS_PER_EPOCH
 
-    if eth1Monitor == nil:
+    if eth1Monitor == nil and lcProxy == nil:
       false
     elif getBeaconTime().slotOrZero > slot + maxAge:
       false
@@ -115,7 +167,7 @@ programMain:
       true
 
   proc onFinalizedHeader(lightClient: LightClient) =
-    notice "New LC finalized header",
+    info "New LC finalized header",
       finalized_header = shortLog(lightClient.finalizedHeader.get)
     let optimisticHeader = lightClient.optimisticHeader.valueOr:
       return
@@ -127,7 +179,7 @@ programMain:
     optSync.setFinalizedHeader(finalizedHeader)
 
   proc onOptimisticHeader(lightClient: LightClient) =
-    notice "New LC optimistic header",
+    info "New LC optimistic header",
       optimistic_header = shortLog(lightClient.optimisticHeader.get)
     let optimisticHeader = lightClient.optimisticHeader.valueOr:
       return
