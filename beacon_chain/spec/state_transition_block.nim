@@ -17,7 +17,10 @@
 #   improvements to be made - other than that, keep things similar to spec unless
 #   motivated by security or performance considerations
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 6):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   std/[algorithm, options, sequtils, sets, tables],
@@ -31,7 +34,7 @@ export extras, phase0, altair
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#block-header
 func process_block_header*(
     state: var ForkyBeaconState, blck: SomeForkyBeaconBlock, flags: UpdateFlags,
-    cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    cache: var StateCache): Result[void, cstring] =
   # Verify that the slots match
   if not (blck.slot == state.slot):
     return err("process_block_header: slot mismatch")
@@ -74,7 +77,7 @@ func `xor`[T: array](a, b: T): T =
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#randao
 proc process_randao(
     state: var ForkyBeaconState, body: SomeForkyBeaconBlockBody, flags: UpdateFlags,
-    cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    cache: var StateCache): Result[void, cstring] =
   let
     proposer_index = get_beacon_proposer_index(state, cache)
 
@@ -105,7 +108,7 @@ proc process_randao(
   ok()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#eth1-data
-func process_eth1_data(state: var ForkyBeaconState, body: SomeForkyBeaconBlockBody): Result[void, cstring] {.raises: [].} =
+func process_eth1_data(state: var ForkyBeaconState, body: SomeForkyBeaconBlockBody): Result[void, cstring]=
   if not state.eth1_data_votes.add body.eth1_data:
     # Count is reset  in process_final_updates, so this should never happen
     return err("process_eth1_data: no more room for eth1 data")
@@ -116,7 +119,7 @@ func process_eth1_data(state: var ForkyBeaconState, body: SomeForkyBeaconBlockBo
   ok()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#is_slashable_validator
-func is_slashable_validator(validator: Validator, epoch: Epoch): bool {.raises: [].} =
+func is_slashable_validator(validator: Validator, epoch: Epoch): bool =
   # Check if ``validator`` is slashable.
   (not validator.slashed) and
     (validator.activation_epoch <= epoch) and
@@ -126,7 +129,7 @@ func is_slashable_validator(validator: Validator, epoch: Epoch): bool {.raises: 
 proc check_proposer_slashing*(
     state: ForkyBeaconState, proposer_slashing: SomeProposerSlashing,
     flags: UpdateFlags):
-    Result[ValidatorIndex, cstring] {.raises: [].} =
+    Result[ValidatorIndex, cstring] =
 
   let
     header_1 = proposer_slashing.signed_header_1.message
@@ -167,7 +170,7 @@ proc check_proposer_slashing*(
 
 proc check_proposer_slashing*(
     state: var ForkedHashedBeaconState; proposer_slashing: SomeProposerSlashing;
-    flags: UpdateFlags): Result[ValidatorIndex, cstring] {.raises: [].} =
+    flags: UpdateFlags): Result[ValidatorIndex, cstring] =
   withState(state):
     check_proposer_slashing(state.data, proposer_slashing, flags)
 
@@ -176,14 +179,14 @@ proc process_proposer_slashing*(
     cfg: RuntimeConfig, state: var ForkyBeaconState,
     proposer_slashing: SomeProposerSlashing, flags: UpdateFlags,
     cache: var StateCache):
-    Result[void, cstring] {.raises: [].} =
+    Result[void, cstring] =
   let proposer_index = ? check_proposer_slashing(state, proposer_slashing, flags)
   ? slash_validator(cfg, state, proposer_index, cache)
   ok()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#is_slashable_attestation_data
 func is_slashable_attestation_data(
-    data_1: AttestationData, data_2: AttestationData): bool {.raises: [].} =
+    data_1: AttestationData, data_2: AttestationData): bool =
   ## Check if ``data_1`` and ``data_2`` are slashable according to Casper FFG
   ## rules.
 
@@ -198,7 +201,7 @@ proc check_attester_slashing*(
        state: ForkyBeaconState,
        attester_slashing: SomeAttesterSlashing,
        flags: UpdateFlags
-     ): Result[seq[ValidatorIndex], cstring] {.raises: [].} =
+     ): Result[seq[ValidatorIndex], cstring] =
   let
     attestation_1 = attester_slashing.attestation_1
     attestation_2 = attester_slashing.attestation_2
@@ -231,7 +234,7 @@ proc check_attester_slashing*(
 
 proc check_attester_slashing*(
     state: var ForkedHashedBeaconState; attester_slashing: SomeAttesterSlashing;
-    flags: UpdateFlags): Result[seq[ValidatorIndex], cstring] {.raises: [].} =
+    flags: UpdateFlags): Result[seq[ValidatorIndex], cstring] =
   withState(state):
     check_attester_slashing(state.data, attester_slashing, flags)
 
@@ -242,7 +245,7 @@ proc process_attester_slashing*(
     attester_slashing: SomeAttesterSlashing,
     flags: UpdateFlags,
     cache: var StateCache
-    ): Result[void, cstring] {.raises: [].} =
+    ): Result[void, cstring] =
   let slashed_attesters =
     ? check_attester_slashing(state, attester_slashing, flags)
 
@@ -252,7 +255,7 @@ proc process_attester_slashing*(
   ok()
 
 func findValidatorIndex*(state: ForkyBeaconState, pubkey: ValidatorPubKey):
-    Opt[ValidatorIndex] {.raises: [].} =
+    Opt[ValidatorIndex] =
   # This linear scan is unfortunate, but should be fairly fast as we do a simple
   # byte comparison of the key. The alternative would be to build a Table, but
   # given that each block can hold no more than 16 deposits, it's slower to
@@ -265,7 +268,7 @@ func findValidatorIndex*(state: ForkyBeaconState, pubkey: ValidatorPubKey):
 proc process_deposit*(cfg: RuntimeConfig,
                       state: var ForkyBeaconState,
                       deposit: Deposit,
-                      flags: UpdateFlags): Result[void, cstring] {.raises: [].} =
+                      flags: UpdateFlags): Result[void, cstring] =
   ## Process an Eth1 deposit, registering a validator or increasing its balance.
 
   # Verify the Merkle branch
@@ -323,7 +326,7 @@ proc check_voluntary_exit*(
     cfg: RuntimeConfig,
     state: ForkyBeaconState,
     signed_voluntary_exit: SomeSignedVoluntaryExit,
-    flags: UpdateFlags): Result[ValidatorIndex, cstring] {.raises: [].} =
+    flags: UpdateFlags): Result[ValidatorIndex, cstring] =
 
   let voluntary_exit = signed_voluntary_exit.message
 
@@ -363,7 +366,7 @@ proc check_voluntary_exit*(
 proc check_voluntary_exit*(
     cfg: RuntimeConfig, state: ForkedHashedBeaconState;
     signed_voluntary_exit: SomeSignedVoluntaryExit;
-    flags: UpdateFlags): Result[ValidatorIndex, cstring] {.raises: [].} =
+    flags: UpdateFlags): Result[ValidatorIndex, cstring] =
   withState(state):
     check_voluntary_exit(cfg, state.data, signed_voluntary_exit, flags)
 
@@ -373,7 +376,7 @@ proc process_voluntary_exit*(
     state: var ForkyBeaconState,
     signed_voluntary_exit: SomeSignedVoluntaryExit,
     flags: UpdateFlags,
-    cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    cache: var StateCache): Result[void, cstring] =
   let exited_validator =
     ? check_voluntary_exit(cfg, state, signed_voluntary_exit, flags)
   ? initiate_validator_exit(cfg, state, exited_validator, cache)
@@ -385,7 +388,7 @@ proc process_operations(cfg: RuntimeConfig,
                         body: SomeForkyBeaconBlockBody,
                         base_reward_per_increment: Gwei,
                         flags: UpdateFlags,
-                        cache: var StateCache): Result[void, cstring] {.raises: [].} =
+                        cache: var StateCache): Result[void, cstring] =
   # Verify that outstanding deposits are processed up to the maximum number of
   # deposits
   let
@@ -410,7 +413,7 @@ proc process_operations(cfg: RuntimeConfig,
   ok()
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#sync-committee-processing
-func get_participant_reward*(total_active_balance: Gwei): Gwei {.raises: [].} =
+func get_participant_reward*(total_active_balance: Gwei): Gwei =
   let
     total_active_increments =
       total_active_balance div EFFECTIVE_BALANCE_INCREMENT
@@ -421,7 +424,7 @@ func get_participant_reward*(total_active_balance: Gwei): Gwei {.raises: [].} =
   max_participant_rewards div SYNC_COMMITTEE_SIZE
 
 # https://github.com/ethereum/consensus-specs/blob/v1.1.0-alpha.6/specs/altair/beacon-chain.md#sync-committee-processing
-func get_proposer_reward*(participant_reward: Gwei): Gwei {.raises: [].} =
+func get_proposer_reward*(participant_reward: Gwei): Gwei =
   participant_reward * PROPOSER_WEIGHT div (WEIGHT_DENOMINATOR - PROPOSER_WEIGHT)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#sync-committee-processing
@@ -429,7 +432,7 @@ proc process_sync_aggregate*(
     state: var (altair.BeaconState | bellatrix.BeaconState),
     sync_aggregate: SomeSyncAggregate, total_active_balance: Gwei,
     cache: var StateCache):
-    Result[void, cstring] {.raises: [].} =
+    Result[void, cstring]  =
   # Verify sync committee aggregate signature signing over the previous slot
   # block root
   when sync_aggregate.sync_committee_signature isnot TrustedSig:
@@ -483,7 +486,7 @@ proc process_sync_aggregate*(
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/bellatrix/beacon-chain.md#process_execution_payload
 proc process_execution_payload*(
     state: var bellatrix.BeaconState, payload: ExecutionPayload,
-    notify_new_payload: ExecutePayload): Result[void, cstring] {.raises: [].} =
+    notify_new_payload: ExecutePayload): Result[void, cstring] =
   ## Verify consistency of the parent hash with respect to the previous
   ## execution payload header
   if is_merge_transition_complete(state):
@@ -530,7 +533,7 @@ type SomePhase0Block =
 proc process_block*(
     cfg: RuntimeConfig,
     state: var phase0.BeaconState, blck: SomePhase0Block, flags: UpdateFlags,
-    cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    cache: var StateCache): Result[void, cstring]=
   ## When there's a new block, we need to verify that the block is sane and
   ## update the state accordingly - the state is left in an unknown state when
   ## block application fails (!)
@@ -550,7 +553,7 @@ type SomeAltairBlock =
 proc process_block*(
     cfg: RuntimeConfig,
     state: var altair.BeaconState, blck: SomeAltairBlock, flags: UpdateFlags,
-    cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    cache: var StateCache): Result[void, cstring]=
   ## When there's a new block, we need to verify that the block is sane and
   ## update the state accordingly - the state is left in an unknown state when
   ## block application fails (!)
@@ -577,7 +580,7 @@ type SomeBellatrixBlock =
 proc process_block*(
     cfg: RuntimeConfig,
     state: var bellatrix.BeaconState, blck: SomeBellatrixBlock,
-    flags: UpdateFlags, cache: var StateCache): Result[void, cstring] {.raises: [].} =
+    flags: UpdateFlags, cache: var StateCache): Result[void, cstring]=
   ## When there's a new block, we need to verify that the block is sane and
   ## update the state accordingly - the state is left in an unknown state when
   ## block application fails (!)

@@ -5,7 +5,11 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 6):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
+
 
 import chronicles
 import stew/io2
@@ -14,7 +18,7 @@ export io2
 when defined(windows):
   import stew/[windows/acl]
 
-proc secureCreatePath*(path: string): IoResult[void] {.raises: [].} =
+proc secureCreatePath*(path: string): IoResult[void] =
   when defined(windows):
     let sres = createFoldersUserOnlySecurityDescriptor()
     if sres.isErr():

@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 6):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   std/[tables],
@@ -65,7 +68,7 @@ type
 func init*(T: type Quarantine): T =
   T()
 
-func checkMissing*(quarantine: var Quarantine): seq[FetchRecord] {.raises: [].} =
+func checkMissing*(quarantine: var Quarantine): seq[FetchRecord] =
   ## Return a list of blocks that we should try to resolve from other client -
   ## to be called periodically but not too often (once per slot?)
   var done: seq[Eth2Digest]
@@ -95,7 +98,7 @@ template anyIt(s, pred: untyped): bool =
       break
   result
 
-func addMissing*(quarantine: var Quarantine, root: Eth2Digest) {.raises: [].} =
+func addMissing*(quarantine: var Quarantine, root: Eth2Digest) =
   ## Schedule the download a the given block
   if quarantine.missing.len >= MaxMissingItems:
     return
@@ -116,14 +119,14 @@ func removeOrphan*(
   quarantine.orphans.del((signedBlock.root, signedBlock.signature))
 
 func isViableOrphan(
-    finalizedSlot: Slot, signedBlock: ForkedSignedBeaconBlock): bool {.raises: [].} =
+    finalizedSlot: Slot, signedBlock: ForkedSignedBeaconBlock): bool =
   # The orphan must be newer than the finalization point so that its parent
   # either is the finalized block or more recent
   let
     slot = getForkedBlockField(signedBlock, slot)
   slot > finalizedSlot
 
-func cleanupUnviable(quarantine: var Quarantine) {.raises: [].} =
+func cleanupUnviable(quarantine: var Quarantine) =
   while quarantine.unviable.len() >= MaxUnviables:
     var toDel: Eth2Digest
     for k in quarantine.unviable.keys():
@@ -131,7 +134,7 @@ func cleanupUnviable(quarantine: var Quarantine) {.raises: [].} =
       break # Cannot modify while for-looping
     quarantine.unviable.del(toDel)
 
-func addUnviable*(quarantine: var Quarantine, root: Eth2Digest) {.raises: [].} =
+func addUnviable*(quarantine: var Quarantine, root: Eth2Digest) =
   if root in quarantine.unviable:
     return
 
@@ -161,7 +164,7 @@ func addUnviable*(quarantine: var Quarantine, root: Eth2Digest) {.raises: [].} =
 
   quarantine.unviable[root] = ()
 
-func cleanupOrphans(quarantine: var Quarantine, finalizedSlot: Slot) {.raises: [].} =
+func cleanupOrphans(quarantine: var Quarantine, finalizedSlot: Slot) =
   var toDel: seq[(Eth2Digest, ValidatorSig)]
 
   for k, v in quarantine.orphans:
@@ -171,7 +174,7 @@ func cleanupOrphans(quarantine: var Quarantine, finalizedSlot: Slot) {.raises: [
   for k in toDel:
     quarantine.addUnviable k[0]
 
-func clearAfterReorg*(quarantine: var Quarantine) {.raises: [].} =
+func clearAfterReorg*(quarantine: var Quarantine) =
   ## Clear missing and orphans to start with a fresh slate in case of a reorg
   ## Unviables remain unviable and are not cleared.
   quarantine.missing.reset()
@@ -190,7 +193,7 @@ func clearAfterReorg*(quarantine: var Quarantine) {.raises: [].} =
 # likely imminent arrival.
 func addOrphan*(
     quarantine: var Quarantine, finalizedSlot: Slot,
-    signedBlock: ForkedSignedBeaconBlock): bool {.raises: [].} =
+    signedBlock: ForkedSignedBeaconBlock): bool =
   ## Adds block to quarantine's `orphans` and `missing` lists.
   if not isViableOrphan(finalizedSlot, signedBlock):
     quarantine.addUnviable(signedBlock.root)
@@ -218,7 +221,7 @@ func addOrphan*(
   true
 
 iterator pop*(quarantine: var Quarantine, root: Eth2Digest):
-    ForkedSignedBeaconBlock {.raises: [].} =
+    ForkedSignedBeaconBlock =
   # Pop orphans whose parent is the block identified by `root`
 
   var toRemove: seq[(Eth2Digest, ValidatorSig)]

@@ -5,7 +5,10 @@
 #   * Apache v2 license (license terms in the root directory or at https://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-{.push raises: [Defect].}
+when (NimMajor, NimMinor) < (1, 6):
+  {.push raises: [Defect].}
+else:
+  {.push raises: [].}
 
 import
   # Stdlib
@@ -141,7 +144,7 @@ type
     of BadProposalKind.DatabaseError:
       message*: string
 
-func `==`*(a, b: BadVote): bool {.raises: [].} =
+func `==`*(a, b: BadVote): bool =
   ## Comparison operator.
   ## Used implictily by Result when comparing the
   ## result of multiple DB versions
@@ -177,7 +180,7 @@ template `<`*(a, b: PubKey0x): bool =
 template cmp*(a, b: PubKey0x): bool =
   cmp(PubKeyBytes(a), PubKeyBytes(b))
 
-func `==`*(a, b: BadProposal): bool {.raises: [].} =
+func `==`*(a, b: BadProposal): bool =
   ## Comparison operator.
   ## Used implictily by Result when comparing the
   ## result of multiple DB versions
@@ -197,33 +200,33 @@ func `==`*(a, b: BadProposal): bool {.raises: [].} =
 # --------------------------------------------
 
 proc writeValue*(writer: var JsonWriter, value: PubKey0x)
-                {.inline, raises: [IOError].} =
+                {.inline, raises: [IOError, Defect].} =
   writer.writeValue("0x" & value.PubKeyBytes.toHex())
 
 proc readValue*(reader: var JsonReader, value: var PubKey0x)
-               {.raises: [SerializationError, IOError].} =
+               {.raises: [SerializationError, IOError, Defect].} =
   try:
     value = PubKey0x hexToByteArray(reader.readValue(string), RawPubKeySize)
   except ValueError:
     raiseUnexpectedValue(reader, "Hex string expected")
 
 proc writeValue*(w: var JsonWriter, a: Eth2Digest0x)
-                {.inline, raises: [IOError].} =
+                {.inline, raises: [IOError, Defect].} =
   w.writeValue "0x" & a.Eth2Digest.data.toHex()
 
 proc readValue*(r: var JsonReader, a: var Eth2Digest0x)
-               {.raises: [SerializationError, IOError].} =
+               {.raises: [SerializationError, IOError, Defect].} =
   try:
     a = Eth2Digest0x fromHex(Eth2Digest, r.readValue(string))
   except ValueError:
     raiseUnexpectedValue(r, "Hex string expected")
 
 proc writeValue*(w: var JsonWriter, a: SlotString or EpochString)
-                {.inline, raises: [IOError].} =
+                {.inline, raises: [IOError, Defect].} =
   w.writeValue $distinctBase(a)
 
 proc readValue*(r: var JsonReader, a: var (SlotString or EpochString))
-               {.raises: [SerializationError, IOError].} =
+               {.raises: [SerializationError, IOError, Defect].} =
   try:
     a = (typeof a)(r.readValue(string).parseBiggestUInt())
   except ValueError:
@@ -241,12 +244,12 @@ proc importSlashingInterchange*(
 # Logging
 # --------------------------------------------
 
-func shortLog*(v: SPDIR_SignedBlock): auto {.raises: [].} =
+func shortLog*(v: SPDIR_SignedBlock): auto =
   (
     slot: shortLog(v.slot.Slot),
     signing_root: shortLog(v.signing_root.Eth2Digest)
   )
-func shortLog*(v: SPDIR_SignedAttestation): auto {.raises: [].} =
+func shortLog*(v: SPDIR_SignedAttestation): auto =
   (
     source_epoch: shortLog(v.source_epoch.Epoch),
     target_epoch: shortLog(v.target_epoch.Epoch),
@@ -266,7 +269,7 @@ proc importInterchangeV5Impl*(
        db: auto,
        spdir: var SPDIR
      ): SlashingImportStatus
-      {.raises: [SerializationError, IOError].} =
+      {.raises: [SerializationError, IOError, Defect].} =
   ## Common implementation of interchange import
   ## according to https://eips.ethereum.org/EIPS/eip-3076
   ## spdir needs to be `var` as it will be sorted in-place
