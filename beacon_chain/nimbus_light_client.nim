@@ -134,7 +134,7 @@ programMain:
                 finalizedBlockRoot = ZERO_HASH)
 
             if lcProxy != nil:
-              lcProxy.blockNumber.ok payload.block_number.toBlockNumber
+              lcProxy.executionPayload.ok payload.asEngineExecutionPayload()
         else: discard
       return
     optSync = initLCOptimisticSync(
