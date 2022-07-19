@@ -11,7 +11,7 @@ import
   ../spec/[beaconstate, forks, helpers],
   ../beacon_clock
 
-when (NimMajor, NimMinor) < (1, 6):
+when (NimMajor, NimMinor) < (1, 4):
   {.push raises: [Defect].}
 else:
   {.push raises: [].}

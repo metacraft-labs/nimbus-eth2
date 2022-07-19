@@ -136,7 +136,7 @@ type
     GetPhase0StateSszResponse |
     GetPhase0BlockSszResponse
 
-when (NimMajor, NimMinor) < (1, 6):
+when (NimMajor, NimMinor) < (1, 4):
   {.push raises: [Defect].}
 else:
   {.push raises: [].}

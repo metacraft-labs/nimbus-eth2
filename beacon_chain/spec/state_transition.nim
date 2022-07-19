@@ -38,7 +38,7 @@
 #   overload is used, the hash tree cache is cleared, which, aside from being
 #   slow itself, causes additional processing to recalculate the merkle tree.
 
-when (NimMajor, NimMinor) < (1, 6):
+when (NimMajor, NimMinor) < (1, 4):
   {.push raises: [Defect].}
 else:
   {.push raises: [].}

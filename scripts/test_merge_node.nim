@@ -14,7 +14,7 @@ import
   chronos,
   ../beacon_chain/eth1/eth1_monitor
 
-when (NimMajor, NimMinor) < (1, 6):
+when (NimMajor, NimMinor) < (1, 4):
   {.push raises: [Defect].}
 else:
   {.push raises: [].}
