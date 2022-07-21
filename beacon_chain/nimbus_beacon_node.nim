@@ -770,7 +770,9 @@ proc init*(T: type BeaconNode,
 
   let restClient =
     if config.payloadBuilder.isSome:
-      RestClientRef.new(config.payloadBuilder.get).valueOr:
+      RestClientRef.new(
+          config.payloadBuilder.get,
+          httpFlags = {HttpClientFlag.NewConnectionAlways}).valueOr:
         warn "Payload builder REST client setup failed",
           payloadBuilderUrl = config.payloadBuilder.get
         nil
