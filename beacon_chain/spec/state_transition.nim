@@ -539,12 +539,15 @@ proc makeBeaconBlock*(
       rollback(state)
       return err(res.error())
 
-    # Manual override for MEV
+    # Override for MEV
     if transactions_root.isSome:
       withState(state):
         when stateFork >= BeaconStateFork.Bellatrix:
           state.data.latest_execution_payload_header.transactions_root =
             transactions_root.get
+          debug "makeBeaconBlock: overriding transactions_root",
+            transactions_root = transactions_root.get,
+            new_state_root = hash_tree_root(state.data)
 
     state.`kind Data`.root = hash_tree_root(state.`kind Data`.data)
     blck.`kind Data`.state_root = state.`kind Data`.root
