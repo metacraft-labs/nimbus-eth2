@@ -584,6 +584,13 @@ proc getBlindedBeaconBlock(
 
   return ok blindedBlock
 
+# TODO temporary, don't merge with this still here
+func mevGraffitiBytes(): GraffitiBytes =
+  const graffitiBytes =
+    toBytes("Nimbus-MEV/v" & versionAsStr & "-" & gitRevision)
+  static: doAssert graffitiBytes.len <= MAX_GRAFFITI_SIZE
+  distinctBase(result)[0 ..< graffitiBytes.len] = graffitiBytes
+
 proc proposeBlockMEV(
     node: BeaconNode, head: BlockRef, validator: AttachedValidator, slot: Slot,
     randao: ValidatorSig, validator_index: ValidatorIndex):
@@ -613,12 +620,9 @@ proc proposeBlockMEV(
   copyFields(
     shimExecutionPayload, executionPayloadHeader.get,
     getFieldNames(ExecutionPayloadHeader))
-  debug "proposeBlockMEV: created shim execution payload",
-    shimExecutionPayload = shimExecutionPayload,
-    executionPayloadHeader = executionPayloadHeader.get
 
   let newBlock = await makeBeaconBlockForHeadAndSlot(
-    node, randao, validator_index, node.graffitiBytes, head, slot,
+    node, randao, validator_index, mevGraffitiBytes(), head, slot,
     execution_payload = Opt.some shimExecutionPayload,
     transactions_root = Opt.some executionPayloadHeader.get.transactions_root,
     execution_payload_root =
