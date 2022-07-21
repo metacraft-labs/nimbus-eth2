@@ -673,6 +673,8 @@ proc proposeBlockMEV(
         copyFields(
           signedBlock.message.body, blindedBlock.get.message.body,
           getFieldNames(typeof(signedBlock.message.body)))
+        signedBlock.message.body.execution_payload = unblindedPayload.data.data
+
         signedBlock.root = hash_tree_root(signedBlock.message)
 
         debug "proposeBlockMEV blinded",
