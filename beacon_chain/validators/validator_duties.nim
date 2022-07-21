@@ -686,11 +686,6 @@ proc proposeBlockMEV(
 
         signedBlock.root = hash_tree_root(signedBlock.message)
 
-        debug "proposeBlockMEV blinded",
-          blinded = blindedBlock.get.message
-        debug "proposeBlockMEV blinded",
-          unblinded = signedBlock.message
-
         doAssert signedBlock.root == hash_tree_root(blindedBlock.get.message)
 
         debug "proposeBlockMEV: proposing unblinded block",
