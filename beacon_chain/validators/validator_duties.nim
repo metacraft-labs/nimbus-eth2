@@ -411,7 +411,8 @@ proc makeBeaconBlockForHeadAndSlot*(
     validator_index: ValidatorIndex, graffiti: GraffitiBytes, head: BlockRef,
     slot: Slot,
     execution_payload: Opt[ExecutionPayload] = Opt.none(ExecutionPayload),
-    transactions_root: Opt[Eth2Digest] = Opt.none(Eth2Digest)):
+    transactions_root: Opt[Eth2Digest] = Opt.none(Eth2Digest),
+    execution_payload_root: Opt[Eth2Digest] = Opt.none(Eth2Digest)):
     Future[ForkedBlockResult] {.async.} =
   # Advance state to the slot that we're proposing for
   let
@@ -475,6 +476,12 @@ proc makeBeaconBlockForHeadAndSlot*(
       transactions_root =
         if transactions_root.isSome:
           Opt.some transactions_root.get
+        else:
+          # TODO using just "Opt.none Eth2Digest," triggers invalid indentation
+          Opt.none(Eth2Digest),
+      execution_payload_root =
+        if execution_payload_root.isSome:
+          Opt.some execution_payload_root.get
         else:
           Opt.none Eth2Digest)
     if res.isErr():
@@ -613,7 +620,9 @@ proc proposeBlockMEV(
   let newBlock = await makeBeaconBlockForHeadAndSlot(
     node, randao, validator_index, node.graffitiBytes, head, slot,
     execution_payload = Opt.some shimExecutionPayload,
-    transactions_root = Opt.some executionPayloadHeader.get.transactions_root)
+    transactions_root = Opt.some executionPayloadHeader.get.transactions_root,
+    execution_payload_root =
+      Opt.some hash_tree_root(executionPayloadHeader.get))
 
   if newBlock.isErr():
     # Haven't committed to the MEV block, so allow EL fallback.
