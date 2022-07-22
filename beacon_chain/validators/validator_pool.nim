@@ -219,6 +219,7 @@ proc getBlockSignature*(v: AttachedValidator, fork: Fork,
           v.data.privateKey).toValidatorSig())
     of ValidatorKind.Remote:
       when blck is BlindedBeaconBlock:
+        # TODO implement when Web3Signer protocol etended to handle this
         err "Web3 remote signing and MEV combination unsupported"
       else:
         let request = Web3SignerRequest.init(

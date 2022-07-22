@@ -563,10 +563,6 @@ proc makeBeaconBlock*(
              hash_tree_root(sync_aggregate),
              execution_payload_root.get])
 
-          debug "makeBeaconBlock: overriding transactions_root",
-            transactions_root = transactions_root.get,
-            new_state_root = hash_tree_root(state.data)
-
     state.`kind Data`.root = hash_tree_root(state.`kind Data`.data)
     blck.`kind Data`.state_root = state.`kind Data`.root
 

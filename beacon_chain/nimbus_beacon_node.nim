@@ -768,7 +768,7 @@ proc init*(T: type BeaconNode,
       max(Moment.init(bellatrixEpochTime, Second),
           Moment.now)
 
-  let restClient =
+  let payloadBuilderRestClient =
     if config.payloadBuilder.isSome:
       RestClientRef.new(
           config.payloadBuilder.get,
@@ -789,7 +789,7 @@ proc init*(T: type BeaconNode,
     config: config,
     attachedValidators: validatorPool,
     eth1Monitor: eth1Monitor,
-    restClient: restClient,
+    payloadBuilderRestClient: payloadBuilderRestClient,
     restServer: restServer,
     keymanagerServer: keymanagerServer,
     keymanagerToken: keymanagerToken,

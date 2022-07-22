@@ -501,10 +501,10 @@ proc getBlindedExecutionPayload(
     node: BeaconNode, slot: Slot, executionBlockRoot: Eth2Digest,
     pubkey: ValidatorPubKey):
     Future[Result[ExecutionPayloadHeader, cstring]] {.async.} =
-  if node.restClient.isNil:
+  if node.payloadBuilderRestClient.isNil:
     return err "getBlindedBeaconBlock: nil REST client"
 
-  let blindedHeader = await node.restClient.getHeader(
+  let blindedHeader = await node.payloadBuilderRestClient.getHeader(
     slot, executionBlockRoot, pubkey)
 
   const httpOk = 200
@@ -649,7 +649,8 @@ proc proposeBlockMEV(
       try:
         debug "proposeBlockMEV: proposing MEV",
           blindedBlock = blindedBlock.get
-        await node.restClient.submitBlindedBlock(blindedBlock.get)
+        await node.payloadBuilderRestClient.submitBlindedBlock(
+          blindedBlock.get)
         # From here on, including error paths, disallow local EL production by
         # returning Opt.some, regardless of whether on head or newBlock.
       except RestDecodingError as exc:
@@ -1208,13 +1209,14 @@ proc registerValidators(node: BeaconNode) {.async.} =
     if  node.config.payloadBuilder.isNone or
         node.currentSlot.epoch < node.dag.cfg.BELLATRIX_FORK_EPOCH:
       return
-    elif node.config.payloadBuilder.isSome and node.restClient.isNil:
-      warn "registerValidators: node.config.payloadBuilder.isSome and node.restClient.isNil"
+    elif  node.config.payloadBuilder.isSome and
+          node.payloadBuilderRestClient.isNil:
+      warn "registerValidators: node.config.payloadBuilder.isSome and node.payloadBuilderRestClient.isNil"
       return
 
     const HttpOk = 200
 
-    let restBuilderStatus = await node.restClient.checkBuilderStatus
+    let restBuilderStatus = await node.payloadBuilderRestClient.checkBuilderStatus
     if restBuilderStatus.status != HttpOk:
       warn "registerValidators: specified builder not available",
         builderUrl = node.config.payloadBuilder.get,
@@ -1234,7 +1236,8 @@ proc registerValidators(node: BeaconNode) {.async.} =
       validatorRegistrations.add validatorRegistration.get
 
     let registerValidatorResult =
-      await node.restClient.registerValidator(validatorRegistrations)
+      await node.payloadBuilderRestClient.registerValidator(
+        validatorRegistrations)
     if HttpOk != registerValidatorResult.status:
       warn "registerValidators: Couldn't register validator with MEV builder",
         registerValidatorResult
