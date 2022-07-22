@@ -30,5 +30,7 @@ if [ -f "${USER_ENV_FILE}" ]; then
   set +o allexport
 fi
 
-source ${ABS_PATH}/vendor/nimbus-build-system/scripts/env.sh
+# Unless expliticly specified otherwise, use the latest Nim 1.6 as of 2022-07-22
+export NIM_COMMIT="${NIM_COMMIT:-5f61f1594d0c11caf0fb650e3d3bc32cf8f38890}"
 
+source ${ABS_PATH}/vendor/nimbus-build-system/scripts/env.sh

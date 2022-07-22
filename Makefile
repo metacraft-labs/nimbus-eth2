@@ -36,6 +36,8 @@ VALIDATORS := 1
 CPU_LIMIT := 0
 BUILD_END_MSG := "\\x1B[92mBuild completed successfully:\\x1B[39m"
 
+ENV_SCRIPT := "./env.sh"
+
 ifeq ($(CPU_LIMIT), 0)
 	CPU_LIMIT_CMD :=
 else
