@@ -17,7 +17,7 @@ import ssz_serialization/merkleization
 import ssz_serialization/types
 import ssz_serialization/proofs
 
-export presets, beacon_time, merkleization, types, proofs
+export presets, beacon_time, options, merkleization, types, proofs
 
 template assertLC*(cond: untyped, msg = "") =
   assert(cond)

@@ -151,3 +151,31 @@ func apply_light_client_update(
       store.optimistic_header = store.finalized_header
     didProgress = true
   didProgress
+
+# https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_store_force_update
+type
+  ForceUpdateResult* = enum
+    NoUpdate,
+    DidUpdateWithoutSupermajority,
+    DidUpdateWithoutFinality
+
+func process_light_client_store_force_update*(
+    store: var LightClientStore,
+    current_slot: Slot): ForceUpdateResult {.discardable, cdecl, exportc, dynlib.} =
+  var res = NoUpdate
+  if store.best_valid_update.isSome and
+      current_slot > store.finalized_header.slot + UPDATE_TIMEOUT:
+    # Forced best update when the update timeout has elapsed
+    template best(): auto = store.best_valid_update.get
+    if best.finalized_header.slot <= store.finalized_header.slot:
+      best.finalized_header = best.attested_header
+    if apply_light_client_update(store, best):
+      template sync_aggregate(): auto = best.sync_aggregate
+      template sync_committee_bits(): auto = sync_aggregate.sync_committee_bits
+      let num_active_participants = countOnes(sync_committee_bits).uint64
+      if num_active_participants * 3 < static(sync_committee_bits.len * 2):
+        res = DidUpdateWithoutSupermajority
+      else:
+        res = DidUpdateWithoutFinality
+    store.best_valid_update.reset()
+  res
