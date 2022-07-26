@@ -121,6 +121,33 @@ proc validate_light_client_update*(
       participant_pubkeys, signing_root.data,
       sync_aggregate.sync_committee_signature)
 
-proc sum*(a,b: float64): float64 {.cdecl, exportc, dynlib.} =
-  a + b
-
+# https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#apply_light_client_update
+func apply_light_client_update(
+    store: var LightClientStore,
+    update: LightClientUpdate): bool {.cdecl, exportc, dynlib} =
+  var didProgress = false
+  let
+    store_period = store.finalized_header.slot.sync_committee_period
+    finalized_period = update.finalized_header.slot.sync_committee_period
+  if not store.is_next_sync_committee_known:
+    assert finalized_period == store_period
+    when update is SomeLightClientUpdateWithSyncCommittee:
+      store.next_sync_committee = update.next_sync_committee
+      if store.is_next_sync_committee_known:
+        didProgress = true
+  elif finalized_period == store_period + 1:
+    store.current_sync_committee = store.next_sync_committee
+    when update is SomeLightClientUpdateWithSyncCommittee:
+      store.next_sync_committee = update.next_sync_committee
+    else:
+      store.next_sync_committee.reset()
+    store.previous_max_active_participants =
+      store.current_max_active_participants
+    store.current_max_active_participants = 0
+    didProgress = true
+  if update.finalized_header.slot > store.finalized_header.slot:
+    store.finalized_header = update.finalized_header
+    if store.finalized_header.slot > store.optimistic_header.slot:
+      store.optimistic_header = store.finalized_header
+    didProgress = true
+  didProgress

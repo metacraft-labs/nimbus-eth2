@@ -812,8 +812,7 @@ func compute_domain*(
   result[4..31] = fork_data_root.data.toOpenArray(0, 27)
 
 # https://github.com/ethereum/consensus-specs/blob/v1.1.10/specs/altair/sync-protocol.md#get_active_header
-func is_finality_update*(update: LightClientUpdate): bool
-  {.cdecl, exportc, dynlib} =
+func is_finality_update*(update: LightClientUpdate): bool =
   not update.finalized_header.isZeroMemory
 
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_signing_root
