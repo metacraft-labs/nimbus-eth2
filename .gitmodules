@@ -5,7 +5,7 @@
 	branch = master
 [submodule "vendor/nim-blscurve"]
 	path = vendor/nim-blscurve
-	url = https://github.com/status-im/nim-blscurve.git
+	url = git@github.com:metacraft-labs/nim-blscurve.git
 	ignore = untracked
 	branch = master
 [submodule "vendor/nim-confutils"]
@@ -205,7 +205,7 @@
 	branch = stable
 [submodule "vendor/nim-ssz-serialization"]
 	path = vendor/nim-ssz-serialization
-	url = https://github.com/status-im/nim-ssz-serialization.git
+	url = git@github.com:metacraft-labs/nim-ssz-serialization.git
 	ignore = untracked
 	branch = master
 [submodule "vendor/nim-websock"]
