@@ -13,12 +13,16 @@
 
 import
   std/[hashes, typetraits],
-  chronicles,
-  chronos/timer,
-  json_serialization,
   ./presets
 
-export hashes, timer, json_serialization, presets
+export hashes, presets
+
+when not defined(lightClientEmbedded):
+  import
+    json_serialization,
+    chronos/timer,
+    chronicles
+  export timer, json_serialization
 
 # A collection of time units that permeate the spec - common to all of them is
 # that they expressed relative to the genesis of the chain at varying
@@ -97,13 +101,14 @@ template ethTimeUnit*(typ: type) {.dirty.} =
   template shortLog*(v: typ): auto = distinctBase(v)
 
   # Serialization
-  proc writeValue*(writer: var JsonWriter, value: typ)
-                  {.raises: [IOError, Defect].}=
-    writeValue(writer, uint64 value)
+  when not defined(lightClientEmbedded):
+    proc writeValue*(writer: var JsonWriter, value: typ)
+                    {.raises: [IOError, Defect].}=
+      writeValue(writer, uint64 value)
 
-  proc readValue*(reader: var JsonReader, value: var typ)
-                 {.raises: [IOError, SerializationError, Defect].} =
-    value = typ reader.readValue(uint64)
+    proc readValue*(reader: var JsonReader, value: var typ)
+                   {.raises: [IOError, SerializationError, Defect].} =
+      value = typ reader.readValue(uint64)
 
 ethTimeUnit Slot
 ethTimeUnit Epoch
@@ -113,7 +118,8 @@ template `<`*(a, b: BeaconTime): bool = a.ns_since_genesis < b.ns_since_genesis
 template `<=`*(a, b: BeaconTime): bool = a.ns_since_genesis <= b.ns_since_genesis
 template `<`*(a, b: TimeDiff): bool = a.nanoseconds < b.nanoseconds
 template `<=`*(a, b: TimeDiff): bool = a.nanoseconds <= b.nanoseconds
-template `<`*(a: TimeDiff, b: Duration): bool = a.nanoseconds < b.nanoseconds
+when not defined(lightClientEmbedded):
+  template `<`*(a: TimeDiff, b: Duration): bool = a.nanoseconds < b.nanoseconds
 
 func toSlot*(t: BeaconTime): tuple[afterGenesis: bool, slot: Slot] =
   if t == FAR_FUTURE_BEACON_TIME:
@@ -123,17 +129,18 @@ func toSlot*(t: BeaconTime): tuple[afterGenesis: bool, slot: Slot] =
   else:
     (false, Slot(uint64(-t.ns_since_genesis) div NANOSECONDS_PER_SLOT))
 
-template `+`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
-  BeaconTime(ns_since_genesis: t.ns_since_genesis + offset.nanoseconds)
+when not defined(lightClientEmbedded):
+  template `+`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
+    BeaconTime(ns_since_genesis: t.ns_since_genesis + offset.nanoseconds)
 
-template `-`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
-  BeaconTime(ns_since_genesis: t.ns_since_genesis - offset.nanoseconds)
+  template `-`*(t: BeaconTime, offset: Duration | TimeDiff): BeaconTime =
+    BeaconTime(ns_since_genesis: t.ns_since_genesis - offset.nanoseconds)
 
-template `-`*(a, b: BeaconTime): TimeDiff =
-  TimeDiff(nanoseconds: a.ns_since_genesis - b.ns_since_genesis)
+  template `-`*(a, b: BeaconTime): TimeDiff =
+    TimeDiff(nanoseconds: a.ns_since_genesis - b.ns_since_genesis)
 
-template `+`*(a: TimeDiff, b: Duration): TimeDiff =
-  TimeDiff(nanoseconds: a.nanoseconds + b.nanoseconds)
+  template `+`*(a: TimeDiff, b: Duration): TimeDiff =
+    TimeDiff(nanoseconds: a.nanoseconds + b.nanoseconds)
 
 const
   # Offsets from the start of the slot to when the corresponding message should
@@ -169,18 +176,20 @@ func start_beacon_time*(s: Slot): BeaconTime =
 
 func block_deadline*(s: Slot): BeaconTime =
   s.start_beacon_time
-func attestation_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + attestationSlotOffset
-func aggregate_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + aggregateSlotOffset
-func sync_committee_message_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + syncCommitteeMessageSlotOffset
-func sync_contribution_deadline*(s: Slot): BeaconTime =
-  s.start_beacon_time + syncContributionSlotOffset
-func light_client_finality_update_time*(s: Slot): BeaconTime =
-  s.start_beacon_time + lightClientFinalityUpdateSlotOffset
-func light_client_optimistic_update_time*(s: Slot): BeaconTime =
-  s.start_beacon_time + lightClientOptimisticUpdateSlotOffset
+
+when not defined(lightClientEmbedded):
+  func attestation_deadline*(s: Slot): BeaconTime =
+    s.start_beacon_time + attestationSlotOffset
+  func aggregate_deadline*(s: Slot): BeaconTime =
+    s.start_beacon_time + aggregateSlotOffset
+  func sync_committee_message_deadline*(s: Slot): BeaconTime =
+    s.start_beacon_time + syncCommitteeMessageSlotOffset
+  func sync_contribution_deadline*(s: Slot): BeaconTime =
+    s.start_beacon_time + syncContributionSlotOffset
+  func light_client_finality_update_time*(s: Slot): BeaconTime =
+    s.start_beacon_time + lightClientFinalityUpdateSlotOffset
+  func light_client_optimistic_update_time*(s: Slot): BeaconTime =
+    s.start_beacon_time + lightClientOptimisticUpdateSlotOffset
 
 func slotOrZero*(time: BeaconTime): Slot =
   let exSlot = time.toSlot
@@ -258,22 +267,23 @@ template start_slot*(period: SyncCommitteePeriod): Slot =
   if period >= maxPeriod: FAR_FUTURE_SLOT
   else: Slot(period * SLOTS_PER_SYNC_COMMITTEE_PERIOD)
 
-func `$`*(t: BeaconTime): string =
-  if t.ns_since_genesis >= 0:
-    $(timer.nanoseconds(t.ns_since_genesis))
-  else:
-    "-" & $(timer.nanoseconds(-t.ns_since_genesis))
+when not defined(lightClientEmbedded):
+  func `$`*(t: BeaconTime): string =
+    if t.ns_since_genesis >= 0:
+      $(timer.nanoseconds(t.ns_since_genesis))
+    else:
+      "-" & $(timer.nanoseconds(-t.ns_since_genesis))
 
-func `$`*(t: TimeDiff): string =
-  if t.nanoseconds >= 0:
-    $(timer.nanoseconds(t.nanoseconds))
-  else:
-    "-" & $(timer.nanoseconds(-t.nanoseconds))
+  func `$`*(t: TimeDiff): string =
+    if t.nanoseconds >= 0:
+      $(timer.nanoseconds(t.nanoseconds))
+    else:
+      "-" & $(timer.nanoseconds(-t.nanoseconds))
 
-func shortLog*(t: BeaconTime | TimeDiff): string = $t
+  func shortLog*(t: BeaconTime | TimeDiff): string = $t
 
-chronicles.formatIt BeaconTime: it.shortLog
-chronicles.formatIt TimeDiff: it.shortLog
-chronicles.formatIt Slot: it.shortLog
-chronicles.formatIt Epoch: it.shortLog
-chronicles.formatIt SyncCommitteePeriod: it.shortLog
+  chronicles.formatIt BeaconTime: it.shortLog
+  chronicles.formatIt TimeDiff: it.shortLog
+  chronicles.formatIt Slot: it.shortLog
+  chronicles.formatIt Epoch: it.shortLog
+  chronicles.formatIt SyncCommitteePeriod: it.shortLog

@@ -1,39 +1,27 @@
 # import nimcrypto/hash
 
-import stew/bitops2
+import std/[typetraits, sequtils, options, tables]
+import stew/[bitops2, objects]
 import nimcrypto/hash
+import blscurve
+
+# import ./ssz_codec
+# import ./forks
 # import stint
 
-
 import
-   ./presets
-
+  ./presets,
+  ./beacon_time
 
 import ssz_serialization/merkleization
 import ssz_serialization/types
 import ssz_serialization/proofs
 
+export presets, beacon_time, merkleization, types, proofs
 
+template assertLC*(cond: untyped, msg = "") =
+  assert(cond)
 
-export merkleization, types, proofs
-
-when (NimMajor, NimMinor) >= (1, 1):
-  type
-    SomePointer = ref | ptr | pointer | proc
-else:
-  type
-    SomePointer = ref | ptr | pointer
-
-type
-  Option*[T] = object
-    ## An optional type that may or may not contain a value of type `T`.
-    ## When `T` is a a pointer type (`ptr`, `pointer`, `ref` or `proc`),
-    ## `none(T)` is represented as `nil`.
-    when T is SomePointer:
-      val: T
-    else:
-      val: T
-      has: bool
 
 type
   Eth2Digest* = MDigest[32 * 8] ## `hash32` from spec
@@ -86,13 +74,39 @@ const
   DEPOSIT_CONTRACT_TREE_DEPTH* = 32
   BASE_REWARDS_PER_EPOCH* = 4
 
+  # from base
+  ZERO_HASH* = Eth2Digest()
 
+
+
+# # Option
+# when (NimMajor, NimMinor) >= (1, 1):
+#   type
+#     SomePointer = ref | ptr | pointer | proc
+# else:
+#   type
+#     SomePointer = ref | ptr | pointer
+
+# type
+#   Option*[T] = object
+#     ## An optional type that may or may not contain a value of type `T`.
+#     ## When `T` is a a pointer type (`ptr`, `pointer`, `ref` or `proc`),
+#     ## `none(T)` is represented as `nil`.
+#     when T is SomePointer:
+#       val: T
+#     else:
+#       val: T
+#       has: bool
 
 type
 # From base
+  DomainType* = distinct array[4, byte]
+  Eth2Domain* = array[32, byte]
+
   GraffitiBytes* = distinct array[MAX_GRAFFITI_SIZE, byte]
   Gwei* = uint64
   ForkDigest* = distinct array[4, byte]
+
 
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#signedbeaconblockheader
@@ -113,6 +127,11 @@ type
     parent_root*: Eth2Digest
     state_root*: Eth2Digest
     body_root*: Eth2Digest
+
+  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#signingdata
+  SigningData* = object
+    object_root*: Eth2Digest
+    domain*: Eth2Domain
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#proposerslashing
   ProposerSlashing* = object
@@ -225,6 +244,11 @@ type
     data*: AttestationData
     signature*: TrustedSig
 
+  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#forkdata
+  ForkData* = object
+    current_version*: Version
+    genesis_validators_root*: Eth2Digest
+
 # From crypto
   ValidatorPubKey* = object ##\
     ## Compressed raw serialized key bytes - this type is used in so as to not
@@ -241,8 +265,11 @@ type
     ## deserialize but doubles the storage footprint
     blob*: array[UncompressedPubKeySize, byte]
 
-  # CookedPubKey* = distinct blscurve.PublicKey ## Valid deserialized key
-
+  CookedPubKey* = distinct blscurve.PublicKey ## Valid deserialized key
+  CookedSig* = distinct blscurve.Signature  ## \
+  ## Cooked signatures are those that have been loaded successfully from a
+  ## ValidatorSig and are used to avoid expensive reloading as well as error
+  ## checking
   ValidatorSig* = object
     blob*: array[RawSigSize, byte]
 
@@ -272,6 +299,64 @@ type
     current_sync_committee*: SyncCommittee
       ## Current sync committee corresponding to `header`
     current_sync_committee_branch*: CurrentSyncCommitteeBranch
+
+  # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#lightclientupdate
+  LightClientUpdate* = object
+    attested_header*: BeaconBlockHeader
+      ## The beacon block header that is attested to by the sync committee
+
+    next_sync_committee*: SyncCommittee
+      ## Next sync committee corresponding to `attested_header`,
+      ## if signature is from current sync committee
+    next_sync_committee_branch*: NextSyncCommitteeBranch
+
+    # The finalized beacon block header attested to by Merkle branch
+    finalized_header*: BeaconBlockHeader
+    finality_branch*: FinalityBranch
+
+    sync_aggregate*: SyncAggregate
+    signature_slot*: Slot
+      ## Slot at which the aggregate signature was created (untrusted)
+
+  # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#lightclientfinalityupdate
+  LightClientFinalityUpdate* = object
+    # The beacon block header that is attested to by the sync committee
+    attested_header*: BeaconBlockHeader
+
+    # The finalized beacon block header attested to by Merkle branch
+    finalized_header*: BeaconBlockHeader
+    finality_branch*: FinalityBranch
+
+    # Sync committee aggregate signature
+    sync_aggregate*: SyncAggregate
+    # Slot at which the aggregate signature was created (untrusted)
+    signature_slot*: Slot
+
+  # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#lightclientoptimisticupdate
+  LightClientOptimisticUpdate* = object
+    # The beacon block header that is attested to by the sync committee
+    attested_header*: BeaconBlockHeader
+
+    # Sync committee aggregate signature
+    sync_aggregate*: SyncAggregate
+    # Slot at which the aggregate signature was created (untrusted)
+    signature_slot*: Slot
+
+  SomeLightClientUpdateWithSyncCommittee* =
+    LightClientUpdate
+
+  SomeLightClientUpdateWithFinality* =
+    LightClientUpdate |
+    LightClientFinalityUpdate
+
+  SomeLightClientUpdate* =
+    LightClientUpdate |
+    LightClientFinalityUpdate |
+    LightClientOptimisticUpdate
+
+  SomeLightClientObject* =
+    LightClientBootstrap |
+    SomeLightClientUpdate
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#synccommittee
   SyncCommittee* = object
@@ -400,27 +485,6 @@ type
       ## safety threshold)
     current_max_active_participants*: uint64
 
-  # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#lightclientupdate
-  LightClientUpdate* = object
-    attested_header*: BeaconBlockHeader
-      ## The beacon block header that is attested to by the sync committee
-
-    next_sync_committee*: SyncCommittee
-      ## Next sync committee corresponding to `attested_header`,
-      ## if signature is from current sync committee
-    next_sync_committee_branch*: NextSyncCommitteeBranch
-
-    # The finalized beacon block header attested to by Merkle branch
-    finalized_header*: BeaconBlockHeader
-    finality_branch*: FinalityBranch
-
-    sync_aggregate*: SyncAggregate
-    signature_slot*: Slot
-      ## Slot at which the aggregate signature was created (untrusted)
-
-
-
-
 
 
 # From Bellatrix
@@ -434,7 +498,6 @@ type
     data*: array[BYTES_PER_LOGS_BLOOM, byte]
 
   PayloadID* = array[8, byte]
-
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#beaconblock
   BellatrixBeaconBlock* = object
@@ -494,14 +557,12 @@ type
     block_hash*: Eth2Digest # Hash of execution block
     transactions*: List[Transaction, MAX_TRANSACTIONS_PER_PAYLOAD]
 
-
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#signedbeaconblock
   BellatrixSignedBeaconBlock* = object
     message*: BellatrixBeaconBlock
     signature*: ValidatorSig
 
     root*: Eth2Digest # cached root of signed beacon block
-
 
   BellatrixMsgTrustedSignedBeaconBlock* = object
     message*: BellatrixTrustedBeaconBlock
@@ -558,8 +619,120 @@ type
 
     root*: Eth2Digest # cached root of signed beacon block
 
-# From forks
+# from crypto
+func load*(v: ValidatorPubKey): Option[CookedPubKey] =
+  ## Parse signature blob - this may fail
+  var val: blscurve.PublicKey
+  if fromBytes(val, v.blob):
+    some CookedPubKey(val)
+  else:
+    none CookedPubKey
 
+func load*(v: UncompressedPubKey): Option[CookedPubKey] =
+  ## Parse signature blob - this may fail
+  var val: blscurve.PublicKey
+  if fromBytes(val, v.blob):
+    some CookedPubKey(val)
+  else:
+    none CookedPubKey
+
+proc loadWithCache*(v: ValidatorPubKey): Option[CookedPubKey] =
+  ## Parse public key blob - this may fail - this function uses a cache to
+  ## avoid the expensive deserialization - for now, external public keys only
+  ## come from deposits in blocks - when more sources are added, the memory
+  ## usage of the cache should be considered
+  var cache {.threadvar.}: Table[typeof(v.blob), CookedPubKey]
+
+  # Try to get parse value from cache - if it's not in there, try to parse it -
+  # if that's not possible, it's broken
+  cache.withValue(v.blob, key) do:
+    return some key[]
+  do:
+    # Only valid keys are cached
+    let cooked = v.load()
+    if cooked.isSome():
+      cache[v.blob] = cooked.get()
+    return cooked
+
+func load*(v: ValidatorSig): Option[CookedSig] =
+  ## Parse signature blob - this may fail
+  var parsed: blscurve.Signature
+  if fromBytes(parsed, v.blob):
+    some(CookedSig(parsed))
+  else:
+    none(CookedSig)
+
+func blsFastAggregateVerify*(
+       publicKeys: openArray[CookedPubKey],
+       message: openArray[byte],
+       signature: CookedSig
+     ): bool =
+  ## Verify the aggregate of multiple signatures on the same message
+  ## This function is faster than AggregateVerify
+  ##
+  ## The proof-of-possession MUST be verified before calling this function.
+  ## It is recommended to use the overload that accepts a proof-of-possession
+  ## to enforce correct usage.
+  # TODO: Note: `invalid` in the following paragraph means invalid by construction
+  #             The keys/signatures are not even points on the elliptic curves.
+  #       To respect both the IETF API and the fact that
+  #       we can have invalid public keys (as in not point on the elliptic curve),
+  #       requiring a wrapper indirection,
+  #       we need a first pass to extract keys from the wrapper
+  #       and then call fastAggregateVerify.
+  #       Instead:
+  #         - either we expose a new API: context + init-update-finish
+  #           in blscurve which already exists internally
+  #         - or at network/databases/serialization boundaries we do not
+  #           allow invalid BLS objects to pollute consensus routines
+  let keys = mapIt(publicKeys, PublicKey(it))
+  fastAggregateVerify(keys, message, blscurve.Signature(signature))
+
+proc blsFastAggregateVerify*(
+       publicKeys: openArray[ValidatorPubKey],
+       message: openArray[byte],
+       signature: CookedSig
+     ): bool =
+  var unwrapped: seq[PublicKey]
+  for pubkey in publicKeys:
+    let realkey = pubkey.loadWithCache()
+    if realkey.isNone:
+      return false
+    unwrapped.add PublicKey(realkey.get)
+
+  fastAggregateVerify(unwrapped, message, blscurve.Signature(signature))
+
+func blsFastAggregateVerify*(
+       publicKeys: openArray[CookedPubKey],
+       message: openArray[byte],
+       signature: ValidatorSig
+     ): bool =
+  let parsedSig = signature.load()
+  parsedSig.isSome and blsFastAggregateVerify(publicKeys, message, parsedSig.get())
+
+proc blsFastAggregateVerify*(
+       publicKeys: openArray[ValidatorPubKey],
+       message: openArray[byte],
+       signature: ValidatorSig
+     ): bool =
+  let parsedSig = signature.load()
+  parsedSig.isSome and blsFastAggregateVerify(publicKeys, message, parsedSig.get())
+
+# from base
+template data*(v: ForkDigest | Version | DomainType): array[4, byte] =
+  distinctBase(v)
+
+const DOMAIN_SYNC_COMMITTEE* = DomainType([byte 0x07, 0x00, 0x00, 0x00])
+
+
+template toSszType*(v: Slot|Epoch|SyncCommitteePeriod): auto = uint64(v)
+# template toSszType*(v: BlsCurveType): auto = toRaw(v)
+template toSszType*(v: ForkDigest|GraffitiBytes): auto = distinctBase(v)
+template toSszType*(v: Version): auto = distinctBase(v)
+# template toSszType*(v: JustificationBits): auto = distinctBase(v)
+# template toSszType*(epochFlags: EpochParticipationFlags): auto = asHashList epochFlags
+
+# From forks
 type
   BeaconBlockFork* {.pure.} = enum
     Altair
@@ -572,6 +745,34 @@ type
     case kind*: BeaconBlockFork
     of BeaconBlockFork.Altair:    altairData*:    AltairBeaconBlock
     of BeaconBlockFork.Bellatrix: bellatrixData*: BellatrixBeaconBlock
+
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_fork_data_root
+func compute_fork_data_root*(current_version: Version,
+    genesis_validators_root: Eth2Digest): Eth2Digest =
+  ## Return the 32-byte fork data root for the ``current_version`` and
+  ## ``genesis_validators_root``.
+  ## This is used primarily in signature domains to avoid collisions across
+  ## forks/chains.
+  hash_tree_root(ForkData(
+    current_version: current_version,
+    genesis_validators_root: genesis_validators_root
+  ))
+
+func stateForkAtEpoch*(cfg: RuntimeConfig, epoch: Epoch): BeaconStateFork =
+  ## Return the current fork for the given epoch.
+  static:
+    doAssert BeaconStateFork.Bellatrix > BeaconStateFork.Altair
+    doAssert GENESIS_EPOCH == 0
+
+  if   epoch >= cfg.BELLATRIX_FORK_EPOCH: return BeaconStateFork.Bellatrix
+  elif epoch >= cfg.ALTAIR_FORK_EPOCH:    return BeaconStateFork.Altair
+
+func forkVersionAtEpoch*(cfg: RuntimeConfig, epoch: Epoch): Version =
+  case cfg.stateForkAtEpoch(epoch)
+  of BeaconStateFork.Bellatrix: cfg.BELLATRIX_FORK_VERSION
+  of BeaconStateFork.Altair:    cfg.ALTAIR_FORK_VERSION
+
+
 
 template withBlck*(
     x: ForkedBeaconBlock
@@ -593,9 +794,143 @@ template withBlck*(
 # func hash_tree_root*(x: ForkedBeaconBlock): Eth2Digest =
 #   withBlck(x): hash_tree_root(blck)
 
-template toSszType*(v: Slot|Epoch|SyncCommitteePeriod): auto = uint64(v)
-# template toSszType*(v: BlsCurveType): auto = toRaw(v)
-# template toSszType*(v: ForkDigest|GraffitiBytes): auto = distinctBase(v)
-# template toSszType*(v: Version): auto = distinctBase(v)
-# template toSszType*(v: JustificationBits): auto = distinctBase(v)
-# template toSszType*(epochFlags: EpochParticipationFlags): auto = asHashList epochFlags
+
+# Helpers
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_domain
+func compute_domain*(
+    domain_type: DomainType,
+    fork_version: Version,
+    genesis_validators_root: Eth2Digest = ZERO_HASH): Eth2Domain =
+  ## Return the domain for the ``domain_type`` and ``fork_version``.
+  #
+  # TODO Can't be used as part of a const/static expression:
+  # https://github.com/nim-lang/Nim/issues/15952
+  # https://github.com/nim-lang/Nim/issues/19969
+  let fork_data_root =
+    compute_fork_data_root(fork_version, genesis_validators_root)
+  result[0..3] = domain_type.data
+  result[4..31] = fork_data_root.data.toOpenArray(0, 27)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.1.10/specs/altair/sync-protocol.md#get_active_header
+func is_finality_update*(update: LightClientUpdate): bool
+  {.cdecl, exportc, dynlib} =
+  not update.finalized_header.isZeroMemory
+
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_signing_root
+func compute_signing_root*(ssz_object: auto, domain: Eth2Domain): Eth2Digest =
+  ## Return the signing root of an object by calculating the root of the
+  ## object-domain tree.
+  let domain_wrapped_object = SigningData(
+    object_root: hash_tree_root(ssz_object),
+    domain: domain
+  )
+  hash_tree_root(domain_wrapped_object)
+
+# https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#is_next_sync_committee_known
+template is_next_sync_committee_known*(store: LightClientStore): bool =
+  not isZeroMemory(store.next_sync_committee)
+
+# https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#is_sync_committee_update
+template is_sync_committee_update*(update: SomeLightClientUpdate): bool =
+  when update is SomeLightClientUpdateWithSyncCommittee:
+    not isZeroMemory(update.next_sync_committee_branch)
+  else:
+    false
+
+
+
+const defaultRuntimeConfig* = RuntimeConfig(
+  # Mainnet config
+
+  # Extends the mainnet preset
+  PRESET_BASE: "mainnet",
+
+  # Free-form short name of the network that this configuration applies to - known
+  # canonical network names include:
+  # * 'mainnet' - there can be only one
+  # * 'prater' - testnet
+  # * 'ropsten' - testnet
+  # Must match the regex: [a-z0-9\-]
+  CONFIG_NAME: "mainnet",
+
+  # Transition
+  # ---------------------------------------------------------------
+  # TBD, 2**256-2**10 is a placeholder
+  # TERMINAL_TOTAL_DIFFICULTY:
+  #   u256"115792089237316195423570985008687907853269984665640564039457584007913129638912",
+  # By default, don't use these params
+  # TERMINAL_BLOCK_HASH: BlockHash.fromHex(
+  #   "0x0000000000000000000000000000000000000000000000000000000000000000"),
+  # TODO TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH: Epoch(uint64.high),
+
+
+
+  # Genesis
+  # ---------------------------------------------------------------
+  # `2**14` (= 16,384)
+  MIN_GENESIS_ACTIVE_VALIDATOR_COUNT: 16384,
+  # Dec 1, 2020, 12pm UTC
+  MIN_GENESIS_TIME: 1606824000,
+  # Mainnet initial fork version, recommend altering for testnets
+  GENESIS_FORK_VERSION: Version [byte 0x00, 0x00, 0x00, 0x00],
+  # 604800 seconds (7 days)
+  GENESIS_DELAY: 604800,
+
+
+  # Forking
+  # ---------------------------------------------------------------
+  # Some forks are disabled for now:
+  #  - These may be re-assigned to another fork-version later
+  #  - Temporarily set to max uint64 value: 2**64 - 1
+
+  # Altair
+  ALTAIR_FORK_VERSION: Version [byte 0x01, 0x00, 0x00, 0x00],
+  ALTAIR_FORK_EPOCH: Epoch(74240), # Oct 27, 2021, 10:56:23am UTC
+  # Bellatrix
+  BELLATRIX_FORK_VERSION: Version [byte 0x02, 0x00, 0x00, 0x00],
+  BELLATRIX_FORK_EPOCH: Epoch(uint64.high),
+  # Sharding
+  SHARDING_FORK_VERSION: Version [byte 0x03, 0x00, 0x00, 0x00],
+  SHARDING_FORK_EPOCH: Epoch(uint64.high),
+
+
+  # Time parameters
+  # ---------------------------------------------------------------
+  # 12 seconds
+  # TODO SECONDS_PER_SLOT: 12,
+  # 14 (estimate from Eth1 mainnet)
+  SECONDS_PER_ETH1_BLOCK: 14,
+  # 2**8 (= 256) epochs ~27 hours
+  MIN_VALIDATOR_WITHDRAWABILITY_DELAY: 256,
+  # 2**8 (= 256) epochs ~27 hours
+  SHARD_COMMITTEE_PERIOD: 256,
+  # 2**11 (= 2,048) Eth1 blocks ~8 hours
+  ETH1_FOLLOW_DISTANCE: 2048,
+
+
+  # Validator cycle
+  # ---------------------------------------------------------------
+  # 2**2 (= 4)
+  INACTIVITY_SCORE_BIAS: 4,
+  # 2**4 (= 16)
+  INACTIVITY_SCORE_RECOVERY_RATE: 16,
+  # 2**4 * 10**9 (= 16,000,000,000) Gwei
+  EJECTION_BALANCE: 16000000000'u64,
+  # 2**2 (= 4)
+  MIN_PER_EPOCH_CHURN_LIMIT: 4,
+  # 2**16 (= 65,536)
+  CHURN_LIMIT_QUOTIENT: 65536,
+
+
+  # Fork choice
+  # ---------------------------------------------------------------
+  # 70%
+  # TODO PROPOSER_SCORE_BOOST: 70,
+
+  # Deposit contract
+  # ---------------------------------------------------------------
+  # Ethereum PoW Mainnet
+  DEPOSIT_CHAIN_ID: 1,
+  DEPOSIT_NETWORK_ID: 1,
+  # DEPOSIT_CONTRACT_ADDRESS: Eth1Address.fromHex("0x00000000219ab540356cBB839Cbe05303d7705Fa")
+)
