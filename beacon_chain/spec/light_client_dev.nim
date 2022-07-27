@@ -179,3 +179,83 @@ func process_light_client_store_force_update*(
         res = DidUpdateWithoutFinality
     store.best_valid_update.reset()
   res
+
+
+# https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_update
+proc process_light_client_update* (
+    store: var LightClientStore,
+    update: LightClientUpdate,
+    current_slot: Slot,
+    genesis_validators_root: Eth2Digest): void {.cdecl, exportc, dynlib.} =
+  validate_light_client_update(
+    store, update, current_slot, genesis_validators_root)
+
+  var didProgress = false
+
+  # Update the best update in case we have to force-update to it
+  # if the timeout elapses
+  if store.best_valid_update.isNone or
+      is_better_update(update, store.best_valid_update.get):
+    store.best_valid_update = some(update.toFull)
+    didProgress = true
+
+  # Track the maximum number of active participants in the committee signatures
+  template sync_aggregate(): auto = update.sync_aggregate
+  template sync_committee_bits(): auto = sync_aggregate.sync_committee_bits
+  let num_active_participants = countOnes(sync_committee_bits).uint64
+  if num_active_participants > store.current_max_active_participants:
+    store.current_max_active_participants = num_active_participants
+
+  # Update the optimistic header
+  if num_active_participants > get_safety_threshold(store) and
+      update.attested_header.slot > store.optimistic_header.slot:
+    store.optimistic_header = update.attested_header
+    didProgress = true
+
+  # Update finalized header
+  let update_has_finalized_next_sync_committee =
+    not store.is_next_sync_committee_known and
+    update.is_sync_committee_update and update.is_finality_update and
+    update.finalized_header.slot.sync_committee_period ==
+    update.attested_header.slot.sync_committee_period
+
+  if num_active_participants * 3 >= static(sync_committee_bits.len * 2) and
+      (update.finalized_header.slot > store.finalized_header.slot or
+       update_has_finalized_next_sync_committee):
+    if apply_light_client_update(store, update):
+      didProgress = true
+    store.best_valid_update.reset()
+
+  assertLC didProgress
+
+proc process_light_client_finality_update* (
+    store: var LightClientStore,
+    finality_update: LightClientFinalityUpdate,
+    current_slot: Slot,
+    genesis_validators_root: Eth2Digest): void {.cdecl, exportc, dynlib.} =
+  let update = LightClientUpdate(
+    attested_header: finality_update.attested_header,
+    next_sync_committee: SyncCommittee(),
+    next_sync_committee_branch: initNextSyncCommitteeBranch() ,
+    finalized_header: finality_update.finalized_header,
+    finality_branch: finality_update.finality_branch,
+    sync_aggregate: finality_update.sync_aggregate,
+    signature_slot: finality_update.signature_slot
+  )
+  process_light_client_update(store, update, current_slot, genesis_validators_root)
+
+proc process_light_client_optimistic_update* (
+    store: var LightClientStore,
+    optimistic_update: LightClientOptimisticUpdate,
+    current_slot: Slot,
+    genesis_validators_root: Eth2Digest): void {.cdecl, exportc, dynlib.} =
+  let update = LightClientUpdate(
+    attested_header: optimistic_update.attested_header,
+    next_sync_committee: SyncCommittee(),
+    next_sync_committee_branch: initNextSyncCommitteeBranch(),
+    finalized_header: BeaconBlockHeader(),
+    finality_branch: initFinalityBranch(),
+    sync_aggregate: optimistic_update.sync_aggregate,
+    signature_slot: optimistic_update.signature_slot,
+    )
+  process_light_client_update(store, update, current_slot, genesis_validators_root)

@@ -619,6 +619,24 @@ type
 
     root*: Eth2Digest # cached root of signed beacon block
 
+# from altair
+template toFull*(
+    update: SomeLightClientUpdate): LightClientUpdate =
+  when update is LightClientUpdate:
+    update
+  elif update is SomeLightClientUpdateWithFinality:
+    LightClientUpdate(
+      attested_header: update.attested_header,
+      finalized_header: update.finalized_header,
+      finality_branch: update.finality_branch,
+      sync_aggregate: update.sync_aggregate,
+      signature_slot: update.signature_slot)
+  else:
+    LightClientUpdate(
+      attested_header: update.attested_header,
+      sync_aggregate: update.sync_aggregate,
+      signature_slot: update.signature_slot)
+
 # from crypto
 func load*(v: ValidatorPubKey): Option[CookedPubKey] =
   ## Parse signature blob - this may fail
@@ -796,6 +814,11 @@ template withBlck*(
 
 
 # Helpers
+type LightClientUpdateMetadata* = object
+  attested_slot*, finalized_slot*, signature_slot*: Slot
+  has_sync_committee*, has_finality*: bool
+  num_active_participants*: uint64
+
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_domain
 func compute_domain*(
     domain_type: DomainType,
@@ -835,8 +858,90 @@ template is_sync_committee_update*(update: SomeLightClientUpdate): bool =
     not isZeroMemory(update.next_sync_committee_branch)
   else:
     false
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/sync-protocol.md#get_safety_threshold
+func get_safety_threshold*(store: LightClientStore): uint64 =
+  max(
+    store.previous_max_active_participants,
+    store.current_max_active_participants
+  ) div 2
+
+func toMeta*(update: SomeLightClientUpdate): LightClientUpdateMetadata =
+  var meta {.noinit.}: LightClientUpdateMetadata
+  meta.attested_slot =
+    update.attested_header.slot
+  meta.finalized_slot =
+    when update is SomeLightClientUpdateWithFinality:
+      update.finalized_header.slot
+    else:
+      GENESIS_SLOT
+  meta.signature_slot =
+    update.signature_slot
+  meta.has_sync_committee =
+    when update is SomeLightClientUpdateWithSyncCommittee:
+      not update.next_sync_committee_branch.isZeroMemory
+    else:
+      false
+  meta.has_finality =
+    when update is SomeLightClientUpdateWithFinality:
+      not update.finality_branch.isZeroMemory
+    else:
+      false
+  meta.num_active_participants =
+    countOnes(update.sync_aggregate.sync_committee_bits).uint64
+  meta
+
+func is_better_data*(new_meta, old_meta: LightClientUpdateMetadata): bool =
+  # Compare supermajority (> 2/3) sync committee participation
+  const max_active_participants = SYNC_COMMITTEE_SIZE.uint64
+  let
+    new_has_supermajority =
+      new_meta.num_active_participants * 3 >= max_active_participants * 2
+    old_has_supermajority =
+      old_meta.num_active_participants * 3 >= max_active_participants * 2
+  if new_has_supermajority != old_has_supermajority:
+    return new_has_supermajority > old_has_supermajority
+  if not new_has_supermajority:
+    if new_meta.num_active_participants != old_meta.num_active_participants:
+      return new_meta.num_active_participants > old_meta.num_active_participants
+
+  # Compare presence of relevant sync committee
+  let
+    new_has_relevant_sync_committee = new_meta.has_sync_committee and
+      new_meta.attested_slot.sync_committee_period ==
+      new_meta.signature_slot.sync_committee_period
+    old_has_relevant_sync_committee = old_meta.has_sync_committee and
+      old_meta.attested_slot.sync_committee_period ==
+      old_meta.signature_slot.sync_committee_period
+  if new_has_relevant_sync_committee != old_has_relevant_sync_committee:
+    return new_has_relevant_sync_committee > old_has_relevant_sync_committee
+
+  # Compare indication of any finality
+  if new_meta.has_finality != old_meta.has_finality:
+    return new_meta.has_finality > old_meta.has_finality
+
+  # Compare sync committee finality
+  if new_meta.has_finality:
+    let
+      new_has_sync_committee_finality =
+        new_meta.finalized_slot.sync_committee_period ==
+        new_meta.attested_slot.sync_committee_period
+      old_has_sync_committee_finality =
+        old_meta.finalized_slot.sync_committee_period ==
+        old_meta.attested_slot.sync_committee_period
+    if new_has_sync_committee_finality != old_has_sync_committee_finality:
+      return new_has_sync_committee_finality > old_has_sync_committee_finality
+
+  # Tiebreaker 1: Sync committee participation beyond supermajority
+  if new_meta.num_active_participants != old_meta.num_active_participants:
+    return new_meta.num_active_participants > old_meta.num_active_participants
+
+  # Tiebreaker 2: Prefer older data (fewer changes to best data)
+  new_meta.attested_slot < old_meta.attested_slot
 
 
+template is_better_update*[A, B: SomeLightClientUpdate](
+    new_update: A, old_update: B): bool =
+  is_better_data(toMeta(new_update), toMeta(old_update))
 
 const defaultRuntimeConfig* = RuntimeConfig(
   # Mainnet config
@@ -933,3 +1038,15 @@ const defaultRuntimeConfig* = RuntimeConfig(
   DEPOSIT_NETWORK_ID: 1,
   # DEPOSIT_CONTRACT_ADDRESS: Eth1Address.fromHex("0x00000000219ab540356cBB839Cbe05303d7705Fa")
 )
+
+template initNextSyncCommitteeBranch*(): NextSyncCommitteeBranch =
+  var res: NextSyncCommitteeBranch
+  for el in 0 ..< log2trunc(NEXT_SYNC_COMMITTEE_INDEX):
+    res[el] = Eth2Digest()
+  res
+
+template initFinalityBranch*(): FinalityBranch =
+  var res: FinalityBranch
+  for el in 0 ..< log2trunc(FINALIZED_ROOT_INDEX):
+    res[el] = Eth2Digest()
+  res
