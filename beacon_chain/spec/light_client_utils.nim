@@ -1,48 +1,88 @@
-# import nimcrypto/hash
-
-import std/[typetraits, sequtils, options, tables]
-import stew/[bitops2, objects]
-import nimcrypto/hash
-import blscurve
-
-# import ./ssz_codec
-# import ./forks
-# import stint
-
 import
-  ./presets,
-  ./beacon_time
+  std/[typetraits, sequtils, options, tables],
+  ssz_serialization/[merkleization, types, proofs],
+  nimcrypto/hash,
+  blscurve
 
-import ssz_serialization/merkleization
-import ssz_serialization/types
-import ssz_serialization/proofs
-
-export presets, beacon_time, options, merkleization, types, proofs
-
-template assertLC*(cond: untyped, msg = "") =
-  assert(cond)
-
+export options, merkleization, types, proofs
 
 type
   Eth2Digest* = MDigest[32 * 8] ## `hash32` from spec
 
+# Callables from stew/options
+func isZeroMemory*[T](x: T): bool =
+  # TODO: iterate over words here
+  for b in cast[ptr array[sizeof(T), byte]](unsafeAddr x)[]:
+    if b != 0:
+      return false
+  return true
+
+# Callables from stew/bitops2
+func log2truncNim(x: uint8|uint16|uint32): int =
+  ## Quickly find the log base 2 of a 32-bit or less integer.
+  # https://graphics.stanford.edu/%7Eseander/bithacks.html#IntegerLogDeBruijn
+  # https://stackoverflow.com/questions/11376288/fast-computing-of-log2-for-64-bit-integers
+  const lookup: array[32, uint8] = [0'u8, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18,
+    22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31]
+  var v = x.uint32
+  v = v or v shr 1 # first round down to one less than a power of 2
+  v = v or v shr 2
+  v = v or v shr 4
+  v = v or v shr 8
+  v = v or v shr 16
+  cast[int](lookup[uint32(v * 0x07C4ACDD'u32) shr 27])
+
+func log2truncNim(x: uint64): int =
+  ## Quickly find the log base 2 of a 64-bit integer.
+  # https://graphics.stanford.edu/%7Eseander/bithacks.html#IntegerLogDeBruijn
+  # https://stackoverflow.com/questions/11376288/fast-computing-of-log2-for-64-bit-integers
+  const lookup: array[64, uint8] = [0'u8, 58, 1, 59, 47, 53, 2, 60, 39, 48, 27, 54,
+    33, 42, 3, 61, 51, 37, 40, 49, 18, 28, 20, 55, 30, 34, 11, 43, 14, 22, 4, 62,
+    57, 46, 52, 38, 26, 32, 41, 50, 36, 17, 19, 29, 10, 13, 21, 56, 45, 25, 31,
+    35, 16, 9, 12, 44, 24, 15, 8, 23, 7, 6, 5, 63]
+  var v = x
+  v = v or v shr 1 # first round down to one less than a power of 2
+  v = v or v shr 2
+  v = v or v shr 4
+  v = v or v shr 8
+  v = v or v shr 16
+  v = v or v shr 32
+  cast[int](lookup[(v * 0x03F6EAF2CD271461'u64) shr 58])
+
+func log2trunc*(x: SomeUnsignedInt): int {.inline.} =
+  ## Return the truncated base 2 logarithm of `x` - this is the zero-based
+  ## index of the last set bit.
+  ##
+  ## If `x` is zero result is -1
+  ##
+  ## log2trunc(x) == bitsof(x) - leadingZeros(x) - 1.
+  ##
+  ## Example:
+  ## doAssert log2trunc(0b01001000'u8) == 6
+  if x == 0: -1
+  else:
+    when nimvm:
+      log2truncNim(x)
+    else:
+      when declared(log2truncBuiltin):
+        log2truncBuiltin(x)
+      else:
+        log2truncNim(x)
+
+type
+  Slot* = distinct uint64
+  Epoch* = distinct uint64
+  SyncCommitteePeriod* = distinct uint64
+  Version* = distinct array[4, byte]
+
 const
-  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#incentivization-weights
-  TIMELY_SOURCE_WEIGHT* = 14
-  TIMELY_TARGET_WEIGHT* = 26
-  TIMELY_HEAD_WEIGHT* = 14
-  SYNC_REWARD_WEIGHT* = 2
-  PROPOSER_WEIGHT* = 8
-  WEIGHT_DENOMINATOR* = 64
+# Constants from base.nim
+  MAX_GRAFFITI_SIZE* = 32
+  DEPOSIT_CONTRACT_TREE_DEPTH* = 32
+  ZERO_HASH* = Eth2Digest()
 
-  PARTICIPATION_FLAG_WEIGHTS* =
-    [TIMELY_SOURCE_WEIGHT, TIMELY_TARGET_WEIGHT, TIMELY_HEAD_WEIGHT]
-
-  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/validator.md#misc
-  TARGET_AGGREGATORS_PER_SYNC_SUBCOMMITTEE* = 16
-  SYNC_COMMITTEE_SUBNET_COUNT* = 4
-
-  # https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#constants
+# Constants from altair.nim
+# https://github.com/ethereum/consensus-specs/blob/vFuture/specs/altair/sync-protocol.md#constants
   # All of these indices are rooted in `BeaconState`.
   # The first member (`genesis_time`) is 32, subsequent members +1 each.
   # If there are ever more than 32 members in `BeaconState`, indices change!
@@ -52,62 +92,71 @@ const
   CURRENT_SYNC_COMMITTEE_INDEX* = 54.GeneralizedIndex # `current_sync_committee`
   NEXT_SYNC_COMMITTEE_INDEX* = 55.GeneralizedIndex # `next_sync_committee`
 
-  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#participation-flag-indices
-  TIMELY_SOURCE_FLAG_INDEX* = 0
-  TIMELY_TARGET_FLAG_INDEX* = 1
-  TIMELY_HEAD_FLAG_INDEX* = 2
-
-  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/beacon-chain.md#inactivity-penalties
-  INACTIVITY_SCORE_BIAS* = 4
-  INACTIVITY_SCORE_RECOVERY_RATE* = 16
-
-  SYNC_SUBCOMMITTEE_SIZE* = SYNC_COMMITTEE_SIZE div SYNC_COMMITTEE_SUBNET_COUNT
-
-
+# Constants from crypto.nim
   RawSigSize* = 96
   RawPubKeySize* = 48
   UncompressedPubKeySize* = 96
-  # RawPrivKeySize* = 48 for Miracl / 32 for BLST
 
-  MAX_GRAFFITI_SIZE* = 32
+# Constants from presets
+  # Genesis
+  GENESIS_FORK_VERSION = Version [byte 0x00, 0x00, 0x00, 0x00]
+  #Phase0
+  SLOTS_PER_EPOCH* {.intdefine.}: uint64 = 32
+  SYNC_COMMITTEE_SIZE* = 512
+    # 2**4 (= 16)
+  MAX_PROPOSER_SLASHINGS*: uint64 = 16
+  # 2**1 (= 2)
+  MAX_ATTESTER_SLASHINGS*: uint64 = 2
+  # 2**7 (= 128)
+  MAX_ATTESTATIONS*: uint64 = 128
+  # 2**4 (= 16)
+  MAX_DEPOSITS*: uint64 = 16
+  # 2**4 (= 16)
+  MAX_VOLUNTARY_EXITS*: uint64 = 16
+  # Altair
+  ALTAIR_FORK_VERSION = Version [byte 0x01, 0x00, 0x00, 0x00]
+  ALTAIR_FORK_EPOCH = Epoch(74240)
+  EPOCHS_PER_SYNC_COMMITTEE_PERIOD* {.intdefine.}: uint64 = 256
+  MIN_SYNC_COMMITTEE_PARTICIPANTS* = 1
+  UPDATE_TIMEOUT*: uint64 = 8192
 
-  DEPOSIT_CONTRACT_TREE_DEPTH* = 32
-  BASE_REWARDS_PER_EPOCH* = 4
+  # Bellatrix
+  BELLATRIX_FORK_VERSION = Version [byte 0x02, 0x00, 0x00, 0x00]
+  BELLATRIX_FORK_EPOCH = Epoch(uint64.high)
+    # 2**30 (= 1,073,741,824)
+  MAX_BYTES_PER_TRANSACTION* = 1073741824
+  # 2**20 (= 1,048,576)
+  MAX_TRANSACTIONS_PER_PAYLOAD* = 1048576
+  # 2**8 (= 256)
+  BYTES_PER_LOGS_BLOOM* = 256
+  # 2**5 (= 32)
+  MAX_EXTRA_DATA_BYTES* = 32
+  # Sharding
+  SHARDING_FORK_VERSION = Version [byte 0x03, 0x00, 0x00, 0x00]
+  SHARDING_FORK_EPOCH = Epoch(uint64.high)
 
-  # from base
-  ZERO_HASH* = Eth2Digest()
+  MAX_VALIDATORS_PER_COMMITTEE*: uint64 = 2048
 
+  SLOTS_PER_SYNC_COMMITTEE_PERIOD* =
+   SLOTS_PER_EPOCH * EPOCHS_PER_SYNC_COMMITTEE_PERIOD
 
+# from beacon_time.nim
+  # Earlier spec versions had these at a different slot
+  GENESIS_SLOT* = Slot(0)
+  GENESIS_EPOCH* = Epoch(0) # compute_epoch_at_slot(GENESIS_SLOT)
+  FAR_FUTURE_SLOT* = Slot(not 0'u64)
+  FAR_FUTURE_EPOCH* = (not 0'u64).Epoch # 2^64 - 1 in spec
 
-# # Option
-# when (NimMajor, NimMinor) >= (1, 1):
-#   type
-#     SomePointer = ref | ptr | pointer | proc
-# else:
-#   type
-#     SomePointer = ref | ptr | pointer
-
-# type
-#   Option*[T] = object
-#     ## An optional type that may or may not contain a value of type `T`.
-#     ## When `T` is a a pointer type (`ptr`, `pointer`, `ref` or `proc`),
-#     ## `none(T)` is represented as `nil`.
-#     when T is SomePointer:
-#       val: T
-#     else:
-#       val: T
-#       has: bool
-
+  # FAR_FUTURE_EPOCH* = Epoch(not 0'u64) # in presets
+  FAR_FUTURE_PERIOD* = SyncCommitteePeriod(not 0'u64)
 type
-# From base
+# Types from base.nim
   DomainType* = distinct array[4, byte]
   Eth2Domain* = array[32, byte]
 
   GraffitiBytes* = distinct array[MAX_GRAFFITI_SIZE, byte]
   Gwei* = uint64
   ForkDigest* = distinct array[4, byte]
-
-
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#signedbeaconblockheader
   SignedBeaconBlockHeader* = object
@@ -138,24 +187,10 @@ type
     signed_header_1*: SignedBeaconBlockHeader
     signed_header_2*: SignedBeaconBlockHeader
 
-  TrustedProposerSlashing* = object
-    # The Trusted version, at the moment, implies that the cryptographic signature was checked.
-    # It DOES NOT imply that the state transition was verified.
-    # Currently the code MUST verify the state transition as soon as the signature is verified
-    signed_header_1*: TrustedSignedBeaconBlockHeader
-    signed_header_2*: TrustedSignedBeaconBlockHeader
-
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#attesterslashing
   AttesterSlashing* = object
     attestation_1*: IndexedAttestation
     attestation_2*: IndexedAttestation
-
-  TrustedAttesterSlashing* = object
-    # The Trusted version, at the moment, implies that the cryptographic signature was checked.
-    # It DOES NOT imply that the state transition was verified.
-    # Currently the code MUST verify the state transition as soon as the signature is verified
-    attestation_1*: TrustedIndexedAttestation
-    attestation_2*: TrustedIndexedAttestation
 
   CommitteeValidatorsBits* = BitList[Limit MAX_VALIDATORS_PER_COMMITTEE]
 
@@ -191,12 +226,9 @@ type
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#AttestationData
   AttestationData* = object
     slot*: Slot
-
     index*: uint64 ## `CommitteeIndex` after validation
-
     # LMD GHOST vote
     beacon_block_root*: Eth2Digest
-
     # FFG vote
     source*: Checkpoint
     target*: Checkpoint
@@ -205,7 +237,6 @@ type
   Deposit* = object
     proof*: array[DEPOSIT_CONTRACT_TREE_DEPTH + 1, Eth2Digest]
       ## Merkle path to deposit root
-
     data*: DepositData
 
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#depositdata
@@ -228,28 +259,12 @@ type
     message*: VoluntaryExit
     signature*: ValidatorSig
 
-  TrustedSignedVoluntaryExit* = object
-    message*: VoluntaryExit
-    signature*: TrustedSig
-
-  TrustedSignedBeaconBlockHeader* = object
-    message*: BeaconBlockHeader
-    signature*: TrustedSig
-
-  TrustedIndexedAttestation* = object
-    # The Trusted version, at the moment, implies that the cryptographic signature was checked.
-    # It DOES NOT imply that the state transition was verified.
-    # Currently the code MUST verify the state transition as soon as the signature is verified
-    attesting_indices*: List[uint64, Limit MAX_VALIDATORS_PER_COMMITTEE]
-    data*: AttestationData
-    signature*: TrustedSig
-
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#forkdata
   ForkData* = object
     current_version*: Version
     genesis_validators_root*: Eth2Digest
 
-# From crypto
+# Types from crypto.nim
   ValidatorPubKey* = object ##\
     ## Compressed raw serialized key bytes - this type is used in so as to not
     ## eagerly load keys - deserialization is slow, as are equality checks -
@@ -272,12 +287,50 @@ type
   ## checking
   ValidatorSig* = object
     blob*: array[RawSigSize, byte]
+# Types from forks.nim
+  BeaconBlockFork* {.pure.} = enum
+    Phase0,
+    Altair,
+    Bellatrix
 
-  # ValidatorPrivKey* = distinct blscurve.SecretKey
+  BeaconStateFork* {.pure.} = enum
+    Phase0,
+    Altair,
+    Bellatrix
 
-  # BlsCurveType* = ValidatorPrivKey | ValidatorPubKey | ValidatorSig
+  ForkedBeaconBlock* = object
+    case kind*: BeaconBlockFork
+    of BeaconBlockFork.Phase0:    phase0Data*:    Phase0BeaconBlock
+    of BeaconBlockFork.Altair:    altairData*:    AltairBeaconBlock
+    of BeaconBlockFork.Bellatrix: bellatrixData*: BellatrixBeaconBlock
 
-# From Altair
+# Types from phase0.nim
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#beaconblockbody
+  Phase0BeaconBlockBody* = object
+    randao_reveal*: ValidatorSig
+    eth1_data*: Eth1Data
+    graffiti*: GraffitiBytes
+
+  # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#beaconblock
+  Phase0BeaconBlock* = object
+    ## For each slot, a proposer is chosen from the validator pool to propose
+    ## a new block. Once the block as been proposed, it is transmitted to
+    ## validators that will have a chance to vote on it through attestations.
+    ## Each block collects attestations, or votes, on past blocks, thus a chain
+    ## is formed.
+
+    slot*: Slot
+    proposer_index*: uint64 # `ValidatorIndex` after validation
+
+    parent_root*: Eth2Digest
+      ## Root hash of the previous block
+
+    state_root*: Eth2Digest
+      # The state root, _after_ this block has been processed
+
+    body*: Phase0BeaconBlockBody
+
+# Types from altair.nim
   FinalityBranch* =
     array[log2trunc(FINALIZED_ROOT_INDEX), Eth2Digest]
 
@@ -413,58 +466,6 @@ type
 
     root*: Eth2Digest # cached root of signed beacon block
 
-  AltairMsgTrustedSignedBeaconBlock* = object
-    message*: AltairTrustedBeaconBlock
-    signature*: ValidatorSig
-
-    root*: Eth2Digest # cached root of signed beacon block
-
-  AltairTrustedBeaconBlock* = object
-    ## When we receive blocks from outside sources, they are untrusted and go
-    ## through several layers of validation. Blocks that have gone through
-    ## validations can be trusted to be well-formed, with a correct signature,
-    ## having a parent and applying cleanly to the state that their parent
-    ## left them with.
-    ##
-    ## When loading such blocks from the database, to rewind states for example,
-    ## it is expensive to redo the validations (in particular, the signature
-    ## checks), thus `TrustedBlock` uses a `TrustedSig` type to mark that these
-    ## checks can be skipped.
-    ##
-    ## TODO this could probably be solved with some type trickery, but there
-    ##      too many bugs in nim around generics handling, and we've used up
-    ##      the trickery budget in the serialization library already. Until
-    ##      then, the type must be manually kept compatible with its untrusted
-    ##      cousin.
-    slot*: Slot
-    proposer_index*: uint64 # `ValidatorIndex` after validation
-    parent_root*: Eth2Digest
-    state_root*: Eth2Digest
-    body*: AltairTrustedBeaconBlockBody
-
-  AltairTrustedBeaconBlockBody* = object
-    ## A full verified block
-    randao_reveal*: TrustedSig
-    eth1_data*: Eth1Data
-    graffiti*: GraffitiBytes
-
-    # Operations
-    proposer_slashings*: List[TrustedProposerSlashing, Limit MAX_PROPOSER_SLASHINGS]
-    attester_slashings*: List[TrustedAttesterSlashing, Limit MAX_ATTESTER_SLASHINGS]
-    attestations*: List[TrustedAttestation, Limit MAX_ATTESTATIONS]
-    deposits*: List[Deposit, Limit MAX_DEPOSITS]
-    voluntary_exits*: List[TrustedSignedVoluntaryExit, Limit MAX_VOLUNTARY_EXITS]
-
-    # [New in Altair]
-    sync_aggregate*: TrustedSyncAggregate
-
-
-  AltairTrustedSignedBeaconBlock* = object
-    message*: AltairTrustedBeaconBlock
-    signature*: TrustedSig
-
-    root*: Eth2Digest # cached root of signed beacon block
-
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/sync-protocol.md#lightclientstore
   LightClientStore* = object
     finalized_header*: BeaconBlockHeader
@@ -485,9 +486,7 @@ type
       ## safety threshold)
     current_max_active_participants*: uint64
 
-
-
-# From Bellatrix
+# Types from bellatrix.nim
   # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/bellatrix/beacon-chain.md#custom-types
   Transaction* = List[byte, Limit MAX_BYTES_PER_TRANSACTION]
 
@@ -564,62 +563,65 @@ type
 
     root*: Eth2Digest # cached root of signed beacon block
 
-  BellatrixMsgTrustedSignedBeaconBlock* = object
-    message*: BellatrixTrustedBeaconBlock
-    signature*: ValidatorSig
+# Types from helpers.nim
+  LightClientUpdateMetadata* = object
+    attested_slot*, finalized_slot*, signature_slot*: Slot
+    has_sync_committee*, has_finality*: bool
+    num_active_participants*: uint64
 
-    root*: Eth2Digest # cached root of signed beacon block
+const DOMAIN_SYNC_COMMITTEE* = DomainType([byte 0x07, 0x00, 0x00, 0x00])
 
-  BellatrixTrustedBeaconBlock* = object
-    ## When we receive blocks from outside sources, they are untrusted and go
-    ## through several layers of validation. Blocks that have gone through
-    ## validations can be trusted to be well-formed, with a correct signature,
-    ## having a parent and applying cleanly to the state that their parent
-    ## left them with.
-    ##
-    ## When loading such blocks from the database, to rewind states for example,
-    ## it is expensive to redo the validations (in particular, the signature
-    ## checks), thus `TrustedBlock` uses a `TrustedSig` type to mark that these
-    ## checks can be skipped.
-    ##
-    ## TODO this could probably be solved with some type trickery, but there
-    ##      too many bugs in nim around generics handling, and we've used up
-    ##      the trickery budget in the serialization library already. Until
-    ##      then, the type must be manually kept compatible with its untrusted
-    ##      cousin.
-    slot*: Slot
-    proposer_index*: uint64 # `ValidatorIndex` after validation
-    parent_root*: Eth2Digest
-    state_root*: Eth2Digest
-    body*: BellatrixTrustedBeaconBlockBody
+# Callables from beacon_time.nim
+template ethTimeUnit*(typ: type) {.dirty.} =
+  proc `+`*(x: typ, y: uint64): typ {.borrow, noSideEffect.}
+  proc `-`*(x: typ, y: uint64): typ {.borrow, noSideEffect.}
+  proc `-`*(x: uint64, y: typ): typ {.borrow, noSideEffect.}
 
-  BellatrixTrustedBeaconBlockBody* = object
-    ## A full verified block
-    randao_reveal*: TrustedSig
-    eth1_data*: Eth1Data
-      ## Eth1 data vote
+  # Not closed over type in question (Slot or Epoch)
+  proc `mod`*(x: typ, y: uint64): uint64 {.borrow, noSideEffect.}
+  proc `div`*(x: typ, y: uint64): uint64 {.borrow, noSideEffect.}
+  proc `div`*(x: uint64, y: typ): uint64 {.borrow, noSideEffect.}
+  proc `-`*(x: typ, y: typ): uint64 {.borrow, noSideEffect.}
 
-    graffiti*: GraffitiBytes
-      ## Arbitrary data
+  proc `*`*(x: typ, y: uint64): uint64 {.borrow, noSideEffect.}
 
-    # Operations
-    proposer_slashings*: List[TrustedProposerSlashing, Limit MAX_PROPOSER_SLASHINGS]
-    attester_slashings*: List[TrustedAttesterSlashing, Limit MAX_ATTESTER_SLASHINGS]
-    attestations*: List[TrustedAttestation, Limit MAX_ATTESTATIONS]
-    deposits*: List[Deposit, Limit MAX_DEPOSITS]
-    voluntary_exits*: List[TrustedSignedVoluntaryExit, Limit MAX_VOLUNTARY_EXITS]
-    sync_aggregate*: TrustedSyncAggregate
+  proc `+=`*(x: var typ, y: typ) {.borrow, noSideEffect.}
+  proc `+=`*(x: var typ, y: uint64) {.borrow, noSideEffect.}
+  proc `-=`*(x: var typ, y: typ) {.borrow, noSideEffect.}
+  proc `-=`*(x: var typ, y: uint64) {.borrow, noSideEffect.}
 
-    # Execution
-    execution_payload*: ExecutionPayload  # [New in Bellatrix]
+  # Comparison operators
+  proc `<`*(x: typ, y: typ): bool {.borrow, noSideEffect.}
+  proc `<`*(x: typ, y: uint64): bool {.borrow, noSideEffect.}
+  proc `<`*(x: uint64, y: typ): bool {.borrow, noSideEffect.}
+  proc `<=`*(x: typ, y: typ): bool {.borrow, noSideEffect.}
+  proc `<=`*(x: typ, y: uint64): bool {.borrow, noSideEffect.}
+  proc `<=`*(x: uint64, y: typ): bool {.borrow, noSideEffect.}
 
-  BellatrixTrustedSignedBeaconBlock* = object
-    message*: BellatrixTrustedBeaconBlock
-    signature*: TrustedSig
+  proc `==`*(x: typ, y: typ): bool {.borrow, noSideEffect.}
+  proc `==`*(x: typ, y: uint64): bool {.borrow, noSideEffect.}
+  proc `==`*(x: uint64, y: typ): bool {.borrow, noSideEffect.}
 
-    root*: Eth2Digest # cached root of signed beacon block
+ethTimeUnit Slot
+ethTimeUnit Epoch
+ethTimeUnit SyncCommitteePeriod
 
-# from altair
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_epoch_at_slot
+func epoch*(slot: Slot): Epoch = # aka compute_epoch_at_slot
+  ## Return the epoch number at ``slot``.
+  if slot == FAR_FUTURE_SLOT: FAR_FUTURE_EPOCH
+  else: Epoch(slot div SLOTS_PER_EPOCH)
+
+# https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/altair/validator.md#sync-committee
+template sync_committee_period*(epoch: Epoch): SyncCommitteePeriod =
+  if epoch == FAR_FUTURE_EPOCH: FAR_FUTURE_PERIOD
+  else: SyncCommitteePeriod(epoch div EPOCHS_PER_SYNC_COMMITTEE_PERIOD)
+
+template sync_committee_period*(slot: Slot): SyncCommitteePeriod =
+  if slot == FAR_FUTURE_SLOT: FAR_FUTURE_PERIOD
+  else: SyncCommitteePeriod(slot div SLOTS_PER_SYNC_COMMITTEE_PERIOD)
+
+# Callables from altair.nim
 template toFull*(
     update: SomeLightClientUpdate): LightClientUpdate =
   when update is LightClientUpdate:
@@ -637,7 +639,7 @@ template toFull*(
       sync_aggregate: update.sync_aggregate,
       signature_slot: update.signature_slot)
 
-# from crypto
+# Callables from crypto.nim
 func load*(v: ValidatorPubKey): Option[CookedPubKey] =
   ## Parse signature blob - this may fail
   var val: blscurve.PublicKey
@@ -646,13 +648,13 @@ func load*(v: ValidatorPubKey): Option[CookedPubKey] =
   else:
     none CookedPubKey
 
-func load*(v: UncompressedPubKey): Option[CookedPubKey] =
+func load*(v: ValidatorSig): Option[CookedSig] =
   ## Parse signature blob - this may fail
-  var val: blscurve.PublicKey
-  if fromBytes(val, v.blob):
-    some CookedPubKey(val)
+  var parsed: blscurve.Signature
+  if fromBytes(parsed, v.blob):
+    some(CookedSig(parsed))
   else:
-    none CookedPubKey
+    none(CookedSig)
 
 proc loadWithCache*(v: ValidatorPubKey): Option[CookedPubKey] =
   ## Parse public key blob - this may fail - this function uses a cache to
@@ -672,40 +674,6 @@ proc loadWithCache*(v: ValidatorPubKey): Option[CookedPubKey] =
       cache[v.blob] = cooked.get()
     return cooked
 
-func load*(v: ValidatorSig): Option[CookedSig] =
-  ## Parse signature blob - this may fail
-  var parsed: blscurve.Signature
-  if fromBytes(parsed, v.blob):
-    some(CookedSig(parsed))
-  else:
-    none(CookedSig)
-
-func blsFastAggregateVerify*(
-       publicKeys: openArray[CookedPubKey],
-       message: openArray[byte],
-       signature: CookedSig
-     ): bool =
-  ## Verify the aggregate of multiple signatures on the same message
-  ## This function is faster than AggregateVerify
-  ##
-  ## The proof-of-possession MUST be verified before calling this function.
-  ## It is recommended to use the overload that accepts a proof-of-possession
-  ## to enforce correct usage.
-  # TODO: Note: `invalid` in the following paragraph means invalid by construction
-  #             The keys/signatures are not even points on the elliptic curves.
-  #       To respect both the IETF API and the fact that
-  #       we can have invalid public keys (as in not point on the elliptic curve),
-  #       requiring a wrapper indirection,
-  #       we need a first pass to extract keys from the wrapper
-  #       and then call fastAggregateVerify.
-  #       Instead:
-  #         - either we expose a new API: context + init-update-finish
-  #           in blscurve which already exists internally
-  #         - or at network/databases/serialization boundaries we do not
-  #           allow invalid BLS objects to pollute consensus routines
-  let keys = mapIt(publicKeys, PublicKey(it))
-  fastAggregateVerify(keys, message, blscurve.Signature(signature))
-
 proc blsFastAggregateVerify*(
        publicKeys: openArray[ValidatorPubKey],
        message: openArray[byte],
@@ -720,50 +688,26 @@ proc blsFastAggregateVerify*(
 
   fastAggregateVerify(unwrapped, message, blscurve.Signature(signature))
 
-func blsFastAggregateVerify*(
-       publicKeys: openArray[CookedPubKey],
-       message: openArray[byte],
-       signature: ValidatorSig
-     ): bool =
-  let parsedSig = signature.load()
-  parsedSig.isSome and blsFastAggregateVerify(publicKeys, message, parsedSig.get())
-
 proc blsFastAggregateVerify*(
        publicKeys: openArray[ValidatorPubKey],
        message: openArray[byte],
        signature: ValidatorSig
      ): bool =
   let parsedSig = signature.load()
-  parsedSig.isSome and blsFastAggregateVerify(publicKeys, message, parsedSig.get())
+  parsedSig.isSome and blsFastAggregateVerify(publicKeys,
+                                              message,
+                                              parsedSig.get())
 
-# from base
+# Callables from base.nim
 template data*(v: ForkDigest | Version | DomainType): array[4, byte] =
   distinctBase(v)
 
-const DOMAIN_SYNC_COMMITTEE* = DomainType([byte 0x07, 0x00, 0x00, 0x00])
-
-
+# Callables from ssz_codec.nim
 template toSszType*(v: Slot|Epoch|SyncCommitteePeriod): auto = uint64(v)
-# template toSszType*(v: BlsCurveType): auto = toRaw(v)
 template toSszType*(v: ForkDigest|GraffitiBytes): auto = distinctBase(v)
 template toSszType*(v: Version): auto = distinctBase(v)
-# template toSszType*(v: JustificationBits): auto = distinctBase(v)
-# template toSszType*(epochFlags: EpochParticipationFlags): auto = asHashList epochFlags
 
-# From forks
-type
-  BeaconBlockFork* {.pure.} = enum
-    Altair
-    Bellatrix
-
-  BeaconStateFork* {.pure.} = enum
-    Altair,
-    Bellatrix
-  ForkedBeaconBlock* = object
-    case kind*: BeaconBlockFork
-    of BeaconBlockFork.Altair:    altairData*:    AltairBeaconBlock
-    of BeaconBlockFork.Bellatrix: bellatrixData*: BellatrixBeaconBlock
-
+# Callables from forks.nim
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_fork_data_root
 func compute_fork_data_root*(current_version: Version,
     genesis_validators_root: Eth2Digest): Eth2Digest =
@@ -776,49 +720,24 @@ func compute_fork_data_root*(current_version: Version,
     genesis_validators_root: genesis_validators_root
   ))
 
-func stateForkAtEpoch*(cfg: RuntimeConfig, epoch: Epoch): BeaconStateFork =
+func stateForkAtEpoch*(epoch: Epoch): BeaconStateFork =
   ## Return the current fork for the given epoch.
   static:
     doAssert BeaconStateFork.Bellatrix > BeaconStateFork.Altair
+    doAssert BeaconStateFork.Altair    > BeaconStateFork.Phase0
     doAssert GENESIS_EPOCH == 0
 
-  if   epoch >= cfg.BELLATRIX_FORK_EPOCH: return BeaconStateFork.Bellatrix
-  elif epoch >= cfg.ALTAIR_FORK_EPOCH:    return BeaconStateFork.Altair
+  if   epoch >= BELLATRIX_FORK_EPOCH: BeaconStateFork.Bellatrix
+  elif epoch >= ALTAIR_FORK_EPOCH:    BeaconStateFork.Altair
+  else:                               BeaconStateFork.Phase0
 
-func forkVersionAtEpoch*(cfg: RuntimeConfig, epoch: Epoch): Version =
-  case cfg.stateForkAtEpoch(epoch)
-  of BeaconStateFork.Bellatrix: cfg.BELLATRIX_FORK_VERSION
-  of BeaconStateFork.Altair:    cfg.ALTAIR_FORK_VERSION
+func forkVersionAtEpoch*(epoch: Epoch): Version =
+  case stateForkAtEpoch(epoch)
+  of BeaconStateFork.Bellatrix: BELLATRIX_FORK_VERSION
+  of BeaconStateFork.Altair:    ALTAIR_FORK_VERSION
+  of BeaconStateFork.Phase0:    GENESIS_FORK_VERSION
 
-
-
-template withBlck*(
-    x: ForkedBeaconBlock
-      # | Web3SignerForkedBeaconBlock |
-      #  ForkedSignedBeaconBlock | ForkedMsgTrustedSignedBeaconBlock |
-      #  ForkedTrustedSignedBeaconBlock
-       ,
-    body: untyped): untyped =
-  case x.kind
-  of BeaconBlockFork.Altair:
-    const stateFork {.inject, used.} = BeaconStateFork.Altair
-    template blck: untyped {.inject.} = x.altairData
-    body
-  of BeaconBlockFork.Bellatrix:
-    const stateFork {.inject, used.} = BeaconStateFork.Bellatrix
-    template blck: untyped {.inject.} = x.bellatrixData
-    body
-
-# func hash_tree_root*(x: ForkedBeaconBlock): Eth2Digest =
-#   withBlck(x): hash_tree_root(blck)
-
-
-# Helpers
-type LightClientUpdateMetadata* = object
-  attested_slot*, finalized_slot*, signature_slot*: Slot
-  has_sync_committee*, has_finality*: bool
-  num_active_participants*: uint64
-
+# Callables from helpers.nim
 # https://github.com/ethereum/consensus-specs/blob/v1.2.0-rc.1/specs/phase0/beacon-chain.md#compute_domain
 func compute_domain*(
     domain_type: DomainType,
@@ -907,7 +826,7 @@ func is_better_data*(new_meta, old_meta: LightClientUpdateMetadata): bool =
   # Compare presence of relevant sync committee
   let
     new_has_relevant_sync_committee = new_meta.has_sync_committee and
-      new_meta.attested_slot.sync_committee_period ==
+      new_meta.attested_slot.sync_committee_period() ==
       new_meta.signature_slot.sync_committee_period
     old_has_relevant_sync_committee = old_meta.has_sync_committee and
       old_meta.attested_slot.sync_committee_period ==
@@ -943,101 +862,9 @@ template is_better_update*[A, B: SomeLightClientUpdate](
     new_update: A, old_update: B): bool =
   is_better_data(toMeta(new_update), toMeta(old_update))
 
-const defaultRuntimeConfig* = RuntimeConfig(
-  # Mainnet config
-
-  # Extends the mainnet preset
-  PRESET_BASE: "mainnet",
-
-  # Free-form short name of the network that this configuration applies to - known
-  # canonical network names include:
-  # * 'mainnet' - there can be only one
-  # * 'prater' - testnet
-  # * 'ropsten' - testnet
-  # Must match the regex: [a-z0-9\-]
-  CONFIG_NAME: "mainnet",
-
-  # Transition
-  # ---------------------------------------------------------------
-  # TBD, 2**256-2**10 is a placeholder
-  # TERMINAL_TOTAL_DIFFICULTY:
-  #   u256"115792089237316195423570985008687907853269984665640564039457584007913129638912",
-  # By default, don't use these params
-  # TERMINAL_BLOCK_HASH: BlockHash.fromHex(
-  #   "0x0000000000000000000000000000000000000000000000000000000000000000"),
-  # TODO TERMINAL_BLOCK_HASH_ACTIVATION_EPOCH: Epoch(uint64.high),
-
-
-
-  # Genesis
-  # ---------------------------------------------------------------
-  # `2**14` (= 16,384)
-  MIN_GENESIS_ACTIVE_VALIDATOR_COUNT: 16384,
-  # Dec 1, 2020, 12pm UTC
-  MIN_GENESIS_TIME: 1606824000,
-  # Mainnet initial fork version, recommend altering for testnets
-  GENESIS_FORK_VERSION: Version [byte 0x00, 0x00, 0x00, 0x00],
-  # 604800 seconds (7 days)
-  GENESIS_DELAY: 604800,
-
-
-  # Forking
-  # ---------------------------------------------------------------
-  # Some forks are disabled for now:
-  #  - These may be re-assigned to another fork-version later
-  #  - Temporarily set to max uint64 value: 2**64 - 1
-
-  # Altair
-  ALTAIR_FORK_VERSION: Version [byte 0x01, 0x00, 0x00, 0x00],
-  ALTAIR_FORK_EPOCH: Epoch(74240), # Oct 27, 2021, 10:56:23am UTC
-  # Bellatrix
-  BELLATRIX_FORK_VERSION: Version [byte 0x02, 0x00, 0x00, 0x00],
-  BELLATRIX_FORK_EPOCH: Epoch(uint64.high),
-  # Sharding
-  SHARDING_FORK_VERSION: Version [byte 0x03, 0x00, 0x00, 0x00],
-  SHARDING_FORK_EPOCH: Epoch(uint64.high),
-
-
-  # Time parameters
-  # ---------------------------------------------------------------
-  # 12 seconds
-  # TODO SECONDS_PER_SLOT: 12,
-  # 14 (estimate from Eth1 mainnet)
-  SECONDS_PER_ETH1_BLOCK: 14,
-  # 2**8 (= 256) epochs ~27 hours
-  MIN_VALIDATOR_WITHDRAWABILITY_DELAY: 256,
-  # 2**8 (= 256) epochs ~27 hours
-  SHARD_COMMITTEE_PERIOD: 256,
-  # 2**11 (= 2,048) Eth1 blocks ~8 hours
-  ETH1_FOLLOW_DISTANCE: 2048,
-
-
-  # Validator cycle
-  # ---------------------------------------------------------------
-  # 2**2 (= 4)
-  INACTIVITY_SCORE_BIAS: 4,
-  # 2**4 (= 16)
-  INACTIVITY_SCORE_RECOVERY_RATE: 16,
-  # 2**4 * 10**9 (= 16,000,000,000) Gwei
-  EJECTION_BALANCE: 16000000000'u64,
-  # 2**2 (= 4)
-  MIN_PER_EPOCH_CHURN_LIMIT: 4,
-  # 2**16 (= 65,536)
-  CHURN_LIMIT_QUOTIENT: 65536,
-
-
-  # Fork choice
-  # ---------------------------------------------------------------
-  # 70%
-  # TODO PROPOSER_SCORE_BOOST: 70,
-
-  # Deposit contract
-  # ---------------------------------------------------------------
-  # Ethereum PoW Mainnet
-  DEPOSIT_CHAIN_ID: 1,
-  DEPOSIT_NETWORK_ID: 1,
-  # DEPOSIT_CONTRACT_ADDRESS: Eth1Address.fromHex("0x00000000219ab540356cBB839Cbe05303d7705Fa")
-)
+# Other helpers
+template assertLC*(cond: untyped, msg = "") =
+  assert(cond)
 
 template initNextSyncCommitteeBranch*(): NextSyncCommitteeBranch =
   var res: NextSyncCommitteeBranch

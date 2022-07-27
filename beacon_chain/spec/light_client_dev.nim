@@ -1,13 +1,4 @@
-# import ./all_in_one
 import ./light_client_utils
-# import ssz_serialization/merkleization
-
-# import ./eth2_merkleization
-
-import
-  stew/[bitops2, objects]
-  # datatypes/altair
-  # helpers
 
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#initialize_light_client_store
 func initialize_light_client_store*(
@@ -113,7 +104,7 @@ proc validate_light_client_update*(
     if bit:
       participant_pubkeys.add(sync_committee.pubkeys.data[idx])
   let
-    fork_version = light_client_utils.defaultRuntimeConfig.forkVersionAtEpoch(update.signature_slot.epoch)
+    fork_version = forkVersionAtEpoch(update.signature_slot.epoch)
     domain = compute_domain(
       DOMAIN_SYNC_COMMITTEE, fork_version, genesis_validators_root)
     signing_root = compute_signing_root(update.attested_header, domain)
@@ -180,7 +171,6 @@ func process_light_client_store_force_update*(
     store.best_valid_update.reset()
   res
 
-
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_update
 proc process_light_client_update* (
     store: var LightClientStore,
@@ -228,6 +218,7 @@ proc process_light_client_update* (
 
   assertLC didProgress
 
+# https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_finality_update
 proc process_light_client_finality_update* (
     store: var LightClientStore,
     finality_update: LightClientFinalityUpdate,
@@ -242,8 +233,10 @@ proc process_light_client_finality_update* (
     sync_aggregate: finality_update.sync_aggregate,
     signature_slot: finality_update.signature_slot
   )
-  process_light_client_update(store, update, current_slot, genesis_validators_root)
+  process_light_client_update(store, update, current_slot,
+                              genesis_validators_root)
 
+# https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_optimistic_update
 proc process_light_client_optimistic_update* (
     store: var LightClientStore,
     optimistic_update: LightClientOptimisticUpdate,
@@ -258,4 +251,5 @@ proc process_light_client_optimistic_update* (
     sync_aggregate: optimistic_update.sync_aggregate,
     signature_slot: optimistic_update.signature_slot,
     )
-  process_light_client_update(store, update, current_slot, genesis_validators_root)
+  process_light_client_update(store, update, current_slot,
+                              genesis_validators_root)
