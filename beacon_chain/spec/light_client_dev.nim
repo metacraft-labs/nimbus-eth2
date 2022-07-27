@@ -115,8 +115,7 @@ proc validate_light_client_update*(
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#apply_light_client_update
 func apply_light_client_update(
     store: var LightClientStore,
-    update: LightClientUpdate): bool {.cdecl, exportc, dynlib} =
-  var didProgress = false
+    update: LightClientUpdate): void {.cdecl, exportc, dynlib} =
   let
     store_period = store.finalized_header.slot.sync_committee_period
     finalized_period = update.finalized_header.slot.sync_committee_period
@@ -124,8 +123,6 @@ func apply_light_client_update(
     assert finalized_period == store_period
     when update is SomeLightClientUpdateWithSyncCommittee:
       store.next_sync_committee = update.next_sync_committee
-      if store.is_next_sync_committee_known:
-        didProgress = true
   elif finalized_period == store_period + 1:
     store.current_sync_committee = store.next_sync_committee
     when update is SomeLightClientUpdateWithSyncCommittee:
@@ -135,41 +132,23 @@ func apply_light_client_update(
     store.previous_max_active_participants =
       store.current_max_active_participants
     store.current_max_active_participants = 0
-    didProgress = true
   if update.finalized_header.slot > store.finalized_header.slot:
     store.finalized_header = update.finalized_header
     if store.finalized_header.slot > store.optimistic_header.slot:
       store.optimistic_header = store.finalized_header
-    didProgress = true
-  didProgress
 
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_store_force_update
-type
-  ForceUpdateResult* = enum
-    NoUpdate,
-    DidUpdateWithoutSupermajority,
-    DidUpdateWithoutFinality
-
 func process_light_client_store_force_update*(
     store: var LightClientStore,
-    current_slot: Slot): ForceUpdateResult {.discardable, cdecl, exportc, dynlib.} =
-  var res = NoUpdate
+    current_slot: Slot): void {.discardable, cdecl, exportc, dynlib.} =
   if store.best_valid_update.isSome and
       current_slot > store.finalized_header.slot + UPDATE_TIMEOUT:
     # Forced best update when the update timeout has elapsed
     template best(): auto = store.best_valid_update.get
     if best.finalized_header.slot <= store.finalized_header.slot:
       best.finalized_header = best.attested_header
-    if apply_light_client_update(store, best):
-      template sync_aggregate(): auto = best.sync_aggregate
-      template sync_committee_bits(): auto = sync_aggregate.sync_committee_bits
-      let num_active_participants = countOnes(sync_committee_bits).uint64
-      if num_active_participants * 3 < static(sync_committee_bits.len * 2):
-        res = DidUpdateWithoutSupermajority
-      else:
-        res = DidUpdateWithoutFinality
+    apply_light_client_update(store, best)
     store.best_valid_update.reset()
-  res
 
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_update
 proc process_light_client_update* (
@@ -180,14 +159,11 @@ proc process_light_client_update* (
   validate_light_client_update(
     store, update, current_slot, genesis_validators_root)
 
-  var didProgress = false
-
   # Update the best update in case we have to force-update to it
   # if the timeout elapses
   if store.best_valid_update.isNone or
       is_better_update(update, store.best_valid_update.get):
     store.best_valid_update = some(update.toFull)
-    didProgress = true
 
   # Track the maximum number of active participants in the committee signatures
   template sync_aggregate(): auto = update.sync_aggregate
@@ -200,7 +176,6 @@ proc process_light_client_update* (
   if num_active_participants > get_safety_threshold(store) and
       update.attested_header.slot > store.optimistic_header.slot:
     store.optimistic_header = update.attested_header
-    didProgress = true
 
   # Update finalized header
   let update_has_finalized_next_sync_committee =
@@ -212,11 +187,8 @@ proc process_light_client_update* (
   if num_active_participants * 3 >= static(sync_committee_bits.len * 2) and
       (update.finalized_header.slot > store.finalized_header.slot or
        update_has_finalized_next_sync_committee):
-    if apply_light_client_update(store, update):
-      didProgress = true
+    apply_light_client_update(store, update)
     store.best_valid_update.reset()
-
-  assertLC didProgress
 
 # https://github.com/ethereum/consensus-specs/blob/dev/specs/altair/light-client/sync-protocol.md#process_light_client_finality_update
 proc process_light_client_finality_update* (
