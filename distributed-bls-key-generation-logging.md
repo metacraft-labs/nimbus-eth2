@@ -24,123 +24,277 @@ The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be i
 
 ## Format
 
-### Cleartext JSON format
+### JSON format
 
-All logging data for a single DKG is stored in JSON format, as a single JSON "top-level" object.
+All logging data for a single DKG during one generation is stored in JSON format, as a single JSON "top-level" log storage object.
 
-This object has a field with key named `log`, whose value is a list of log entries, stored as JSON objects in the order of their creation.
+This object contains in a field a list of log entries, stored as JSON objects in the order of their creation.
 
-All log entries MUST have a mandatory `op` field. Some MUST have other mandatory fields, depending on the `op` field.
+All log entries MUST have a mandatory `op` field. Some have other mandatory fields, depending on the `op` field.
 
 A log entry MAY have fields other than the mandatory ones. While parsing a log entry, fields unknown to the specific implementation SHOULD be ignored.
 
-The "top-level" object MAY have fields other than the `log` one. While parsing this object, fields unknown to the specific implementation SHOULD be ignored.
+The "top-level" object MAY have extra fields. While parsing this object, fields unknown to the specific implementation SHOULD be ignored.
 
-### Encryption
-
-The "top-level" object MUST be stored in an encrypted form, as some log entries contain key secrets.
-
-The proposed encryption format is that of [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335), with the "top-level" object as the encrypted secret.
-
-## Log entries
-
-JSON schema of a log entry:
+JSON schema of a "top-level" log storage object:
 ```
 {
-    "$ref": "#/definitions/LogEntry",
+    "$ref": "#/definitions/Log",
     "definitions": {
-        "LogEntry": {
+        "Log": {
             "type": "object",
             "properties": {
-                "anyOf":[
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "init"
-                        },
-                        "count": {
-                            "type": "integer",
-                            "minimum": 2
-                        }
-                        "threshold": {
-                            "type": "integer",
-                            "minimum": 2
-                        }
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "genOurSecrets"
-                        },
-                        "baseSecrets": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "pattern": "^[0-9A-Fa-f]{64}$"
-                            }
-                        }
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "getVector"
-                        }
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "setShareId"
-                        },
-                        "shareId": {
-                            "type": "integer",
-                            "minimum": 1
-                        }
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "setVector"
-                        },
-                        "shareId": {
-                            "type": "integer",
-                            "minimum": 1
-                        },
-                        "vvector": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                                "pattern": "^[0-9A-Fa-f]{96}$"
-                            }
-                        }
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "setPartialSecret"
-                        },
-                        "shareId": {
-                            "type": "integer",
-                            "minimum": 1
-                        },
-                        "secret": {
-                            "type": "string",
-                            "pattern": "^[0-9A-Fa-f]{64}$"
-                        },
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "genKeys"
-                        },
-                    },
-                    {
-                        "op": {
-                            "type": "string",
-                            "const": "finish"
-                        },
+                "version": {
+                    "type": "integer"
+                },
+                "generationId": {
+                    "type": "string",
+                    "minLength": 16,
+                    "pattern": "^[0-9A-Za-z\\_\\-]+$"
+                },
+                "entries": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/LogEntry"
                     }
-                ]
+                }
+            },
+            "required": [
+                "version",
+                "entries"
+            ],
+            "additionalProperties": {
+                "not": false
             }
+        },
+        "LogEntry": {
+            "type": "object",
+            "oneOf": [
+                {
+                    "$ref": "#/definitions/LogEntry_Init"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_GenOurSecrets"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_GetVerificationVector"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_SetShareId"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_SetVerificationVector"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_SetPartialSecret"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_GenKeys"
+                },
+                {
+                    "$ref": "#/definitions/LogEntry_Finish"
+                }
+            ],
+            "additionalProperties": {
+                "not": false
+            }
+        },
+        "LogEntry_Init": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "init"
+                },
+                "count": {
+                    "type": "integer",
+                    "minimum": 2
+                },
+                "threshold": {
+                    "type": "integer",
+                    "minimum": 2
+                }
+            },
+            "required": [
+                "op",
+                "count",
+                "threshold"
+            ]
+        },
+        "LogEntry_GenOurSecrets": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "genOurSecrets"
+                },
+                "baseSecrets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[0-9A-Fa-f]{64}$"
+                    }
+                }
+            },
+            "required": [
+                "op",
+                "baseSecrets"
+            ]
+        },
+        "LogEntry_GetVerificationVector": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "getVector"
+                }
+            },
+            "required": [
+                "op"
+            ]
+        },
+        "LogEntry_SetShareId": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "setShareId"
+                },
+                "shareId": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "required": [
+                "op",
+                "shareId"
+            ]
+        },
+        "LogEntry_SetVerificationVector": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "setVector"
+                },
+                "shareId": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "vvector": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^[0-9A-Fa-f]{96}$"
+                    }
+                }
+            },
+            "required": [
+                "op",
+                "shareId",
+                "vvector"
+            ]
+        },
+        "LogEntry_SetPartialSecret": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "setPartialSecret"
+                },
+                "shareId": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "secret": {
+                    "type": "string",
+                    "pattern": "^[0-9A-Fa-f]{64}$"
+                },
+            },
+            "required": [
+                "op",
+                "shareId",
+                "secret"
+            ]
+        },
+        "LogEntry_GenKeys": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "genKeys"
+                },
+            },
+            "required": [
+                "op"
+            ]
+        },
+        "LogEntry_Finish": {
+            "properties": {
+                "op": {
+                    "type": "string",
+                    "const": "finish"
+                },
+            },
+            "required": [
+                "op"
+            ]
+        }
+    }
+}
+```
+### Encryption
+
+The "top-level" JSON-format object MUST be stored in an encrypted form, as some log entries contain key secrets.
+
+The proposed encryption format is based on [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335), with the "top-level" object as the encrypted secret.
+
+JSON schema of an encrypted "top-level" log storage object:
+```
+{
+    "$ref": "#/definitions/Keystore",
+    "definitions": {
+        "Keystore": {
+            "type": "object",
+            "properties": {
+                "crypto": {
+                    "type": "object",
+                    "properties": {
+                        "kdf": {
+                            "$ref": "#/definitions/Module"
+                        },
+                        "checksum": {
+                            "$ref": "#/definitions/Module"
+                        },
+                        "cipher": {
+                            "$ref": "#/definitions/Module"
+                        }
+                    }
+                },
+                "description": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "crypto",
+                "version"
+            ],
+            "title": "DKG Log Store"
+        },
+        "Module": {
+            "type": "object",
+            "properties": {
+                "function": {
+                    "type": "string"
+                },
+                "params": {
+                    "type": "object"
+                },
+                "message": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "function",
+                "params",
+                "message"
+            ]
         }
     }
 }
