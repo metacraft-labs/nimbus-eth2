@@ -1,3 +1,32 @@
+# DVT (Distributed validator technology)
+
+Showcasing the DVT approach to key generation and management, leveraging Raft consensus, Shamir secret sharing, and threshold key techniques for secure, fault-tolerant validator operation with signature aggregation.
+
+
+## Draft specification
+- [Distributed BLS Key Generation Specification](https://github.com/metacraft-labs/nimbus-dvt/blob/dvt-docs/distributed-bls-key-generation.md)
+
+
+TODO: Add rest of the documents in dvt-docs
+
+## How to setup DKG
+
+TODO: Add the code for dkg
+
+## How to setup nimbus with raft
+
+TODO: Add the code for raft
+
+## DVT Branch Maintenance
+
+Commits that modify the `README.md` file (this file) should always have commit messages starting with the prefix:
+
+You can use the following command to move **all commits** with this prefix to the top of the commit history and squash them into a single commit:
+
+```bash
+./move_commits_to_top.sh dvt-readme-changes
+```
+
 # Nimbus Eth2 (Beacon Chain)
 
 [![Github Actions CI](https://github.com/status-im/nimbus-eth2/actions/workflows/ci.yml/badge.svg?branch=stable)](https://github.com/status-im/nimbus-eth2/actions/workflows/ci.yml?query=branch%3Astable)
