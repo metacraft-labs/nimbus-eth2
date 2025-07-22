@@ -32,36 +32,40 @@ This is not a final version of the document. The following problems must be solv
 
 This document describes a format for securely storing either:
 
-- a BLS12-381 partial secret key (key share), generated for usage in threshold signing within a consensus algorithm
-- a log of the state changes of a distributed BLS12-381 key generator during the generation of the key described above
+- a BLS12-381 partial secret key (key share), generated for usage within a DVT squad for threshold signing
+- detailed log of the progress of the distributed key generation (DKG) protocol while the key share is being generated
+- configuration that utilize remote signers in various threshold signing scenarios
 
-The format can store also all supplementary info needed by an implementation of the consensus algorithm.
+The format can store also all supplementary information needed by DVT squad consensus protocols.
 
 # Abstract
 
-The distributed generation of a distributed BLS12-381 key can take a significant time, especially in real-time conditions where quick exchange of information between participants is not granted. During this time, the work of the generator modules can be interrupted by a number of events - software or hardware failure, software or hardware upgrade or migration, etc. To continue with the generation process after such an event, the generator module state must be preserved and recovered. The procedure will be to log every state change, and to read the log and recover the generator module state from it after an interruption.
+The distributed generation of a distributed BLS12-381 key can take significant time, particularly in liquid staking protocols based on smart contracts where the quick exchange of information between participants is not granted. During this time, the work of the generator modules can be interrupted by a number of events - software or hardware failure, software or hardware upgrade or migration, etc. To continue with the generation process after such an event, the DKG module state must be preserved and recovered. The procedure will be to log every state change, and to read the log and recover the generator module state from it after an interruption.
 
 To enable such a storing and re-reading even after a software migration, a standardized format is needed, that ensures interoperability between the different software implementations. This document proposes such a format.
 
+# Terminology
+
+The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
+
+TODO: Add definition for DVT squad that references another spec.
+TODO: Add definition for Threshold signing that references another spec.
+TODO: Add definition for DVT squad consensus protocol.
+TODO: Add definition for DKG that references another spec.
+
 # Motivation
 
-Distributed keys, eg. conforming to the Shamir Secret Sharing (SSS) scheme, are a convenient tool for consensus algorithms. Their generation in one place however creates a SPOF where the key can be compromised, negating some of the most important advantages of this scheme.
+Distributed keys, eg. conforming to the Shamir Secret Sharing (SSS) scheme, are a convenient tool for minimizing the risk of theft or malicious use of Ethereum validator keys. Their generation in one place however creates a SPOF where the key can be compromised, negating some of the most important advantages of this scheme.
 
-Algorithms exist to generate a distributed set of keys in a distributed manner, so no entity ever gets access to more than one of the key shares. These algorithms however tend to take a non-negligible time. During this time, a system restart might happen, or software upgrade or migration might be required. This necessitates the ability to securely store the state of a distributed key generator, and to recover the generator state from there. For maximal convenience and data continuity, the object that stores the generator state should best be able to store the generated key too.
+Algorithms exist to generate a distributed set of keys in a distributed manner, so no entity ever gets access to more than one of the key shares. These algorithms however MAY take significant time (e.g. days). During this time, a system restart might happen, or software upgrade or migration might be required. This necessitates the ability to securely store the state of a distributed key generator, and to recover the generator state from there. For maximal convenience and data continuity, the object that stores the generator state should best be able to store the generated key too.
 
-The popular [EIP-2335](https://eips.ethereum.org/EIPS/eip-2335) format has proven its applicability for storing an Ethereum validator key, together with other info concerning this key and needed by the validator. However, its current version does not offer the ability to store and possibly replay the generator state.
+The popular [EIP-2335](https://eips.ethereum.org/EIPS/eip-2335) format has proven its applicability for storing an Ethereum validator key, together with other info concerning this key and needed by the validator. However, its current version does not offer the ability to store and possibly recreate the generator state.
+
+Distributed keys can be utilized together with remote or hardware signers to create further layers of protection for the senstive key shares.
 
 Also, different consensus algorithms need different supplementary information. Storing this information together with the key share / the generator states can be useful and convenient, as the usage of the EIP-2335 format has proven.
 
 The format proposed here aims to solve these problems.
-
-Subsequent versions of it can add support for more consensus algorithms and / or other types of sensitive information.
-
-Variations and / or extensions of it could be able to securely store any kind of sensitive info that is being generated in a multi-stage way, both as generation states and as the already generated info.
-
-# Specification
-
-The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
 
 ## Stored information
 
@@ -69,7 +73,7 @@ The partial secret key is sensitive, and must be preserved in an encrypted stora
 
 The secrets and the states involved in the key generation procedure are sensitive too, as the partial keys can be derived from them. Therefore, they must be preserved in an encrypted storage for the duration of the procedure. This ensures that, if the generation is interrupted - eg. due to a restart, software upgrade or migration to a different software - it will be able to recover its state and continue from the point of interruption on. To allow this, we store the generator states as a log, described in [TODO!]().
 
-The format we propose is based on the tested and successful [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335). We extend it with fields for the information needed by the different consensus algorithms that it might be used for, and with ability to store in encrypted form either an already generated BLS partial key (key share), or a log of DVT key generation states (if the generation hasn't finished yet).
+The format we propose is based on the tested and successful [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335). The semantics of the fields `crypto`, `pubkey`, `description`, `version` and `uuid` is fully preserved. We extend it with fields for the information needed by the different consensus algorithms that it might be used for, and with ability to store in encrypted form either an already generated BLS partial key (key share), or a log of DVT key generation states (if the generation hasn't finished yet).
 
 ## Sensitive Info
 
@@ -459,9 +463,6 @@ The DVT keystore MUST be stored in JSON format.
                 },
                 {
                     "$ref": "#/definitions/Raft"
-                },
-                {
-                    "$ref": "#/definitions/HotStuff"
                 }
             ],
             "required": [
@@ -572,17 +573,6 @@ The DVT keystore MUST be stored in JSON format.
                 "signingMethod",
                 "raftPrivateKey",
                 "raftUuid"
-            ]
-        },
-        "HotStuff": {
-            "properties": {
-                "signingMethod": {
-                    "type": "string",
-                    "const": "hotstuff"
-                }
-            },
-            "required": [
-                "signingMethod"
             ]
         },
         "DvtRemotes": {
@@ -771,6 +761,10 @@ The DVT keystore MUST be stored in JSON format.
 ```
 
 ##### HotStuff configuration
+
+Future versions of this format MAY add support for more consensus algorithms and / or other types of sensitive information.
+As an example, consider the potential addition of Hotstuff as a DVT squad consensus protocol. The following DVT keystore might become a valid configuration:
+
 ```
 {
   "crypto": {
