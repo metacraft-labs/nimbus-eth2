@@ -7,6 +7,7 @@
   - [Participating entities](#participating-entities)
     - [Security consideration](#security-considerations)
     - [Orchestration](#orchestration)
+      - [Trust Assumptions](#trust-assumptions)
   - [Generation sequence](#generation-sequence)
     - [Initiation by the orchestrator](#initiation-by-the-orchestrator)
     - [Creation of Key Share Generator object](#creation-of-key-share-generator-object)
@@ -20,6 +21,7 @@
     - [Distribution of Verification Vectors](#distribution-of-verification-vectors)
     - [Exchange of Partial Secrets Between Participants](#exchange-of-partial-secrets-between-participants)
       - [Security Requirements for Transmission](#security-requirements-for-transmission)
+      - [Partial Secret Verification](#partial-secret-verification)
       - [Timeout Handling](#timeout-handling)
     - [Generating the Distributed Key Share and Aggregated Public Key](#generating-the-distributed-key-share-and-aggregated-public-key)
     - [Submission of Data to Orchestrator](#submission-of-data-to-orchestrator)
@@ -57,14 +59,14 @@ Distributed key generation enhances security by ensuring that no single particip
 
 # A note on purpose
 
-This algorithm was originally developed for generating key shares for Ethereum consensus nodes that employ distributed signers or distributed (DVT) validator squads. However, its applicability is broader—it can be used for any use case that requires distributed generation of BLS12-381 key shares.
+This algorithm was originally developed for generating key shares for Ethereum consensus nodes that employ distributed signers or distributed (DVT) validator clusters. However, its applicability is broader—it can be used for any use case that requires distributed generation of BLS12-381 key shares.
 
 # Motivation
 
 Ethereum validators sign their actions with a private key.
-To improve resilience and security, they increasingly use distributed signers, holding shares of the key, created according to the Shamir's Secret Sharing (SSS) scheme - a set of X signers, any Y of which (Y < X) must sign a decision to make it valid.
+To improve resilience and security, they increasingly use distributed signers, holding shares of the key, created according to the Shamir's Secret Sharing (SSS) scheme - a set of `n` signers, any `t` of which must sign a decision to make it valid (`t < n`).
 
-This approach improves availability — only Y participants are needed to proceed — and security, as compromising the key requires access to at least Y shares, held by different entities.
+This approach improves availability — only `t` participants are needed to proceed — and security, as compromising the key requires access to at least `t` shares, held by different entities.
 
 Traditionally, key shares are generated centrally and then distributed. This however creates a single point of failure where the full key exists. The algorithm described here avoids this by enabling each participant to generate their share independently, without any party ever learning the full key or another's share.
 
@@ -72,7 +74,7 @@ The design is inspired by the distributed key generation code and docs of [Dirk]
 
 # Specification
 
-The algorithm generates X BLS12-381 shares of a distributed private key with threshold Y, where X > 1, and 0 < Y ≤ X.
+The algorithm generates n BLS12-381 shares of a distributed private key with threshold `t`, where `n > 1`, and `0 < t ≤ n`.
 
 The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
 
@@ -83,7 +85,7 @@ All keys and signatures mentioned here and below are BLS12-381 ones, conforming 
 
 ## Participating entities
 
-Exactly X entities MUST participate in the generation process, where X is the total number of key shares to be generated. Every participant generates one unique share.
+Exactly `n` entities MUST participate in the generation process, where `n` is the total number of key shares to be generated. Every participant generates one unique share.
 
 The participants MUST be able to communicate over private, authenticated, point-to-point channels.
 
@@ -103,6 +105,14 @@ An entity - one of the participants or a separate component, potentially a smart
 
 The algorithms described in this document are designed to enable the orchestrator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
 
+#### Trust Assumptions
+
+The orchestrator's trust model significantly impacts the security guarantees of the distributed key generation:
+
+- **Trusted centralized orchestrator**: In this model, participants must trust the orchestrator to behave honestly and remain available. This creates a single point of failure where a compromised or malicious orchestrator could disrupt the process or bias key generation. However, this model simplifies implementation and reduces computational overhead.
+
+- **Trustless orchestrator**: A trustless orchestrator (such as a blockchain smart contract) requires cryptographic proofs of participant behavior and fault attribution. Participants submit zero-knowledge proofs or other cryptographic evidence that can be verified on-chain. This eliminates trust in the orchestrator but increases complexity and computational requirements.
+
 ## Generation sequence
 
 Consists of the following steps:
@@ -111,8 +121,8 @@ Consists of the following steps:
 
 The orchestrator initiates the process by notifying a set of entities capable of acting as participants in distributed key generation.
 
-- If participation is mandatory, the orchestrator will notify exactly X entities.
-- If participation is optional, the orchestrator will typically notify more than X entities, and will select X participants from the candidates who apply. If less than X candidates apply or are selected, the orchestrator might either notify more entities, or declare the generation as unsuccessful.
+- If participation is mandatory, the orchestrator will notify exactly `n` entities.
+- If participation is optional, the orchestrator will typically notify more than `n` entities, and will select `n` participants from the candidates who apply. If less than `n` candidates apply or are selected, the orchestrator might either notify more entities, or declare the generation as unsuccessful.
 
 The initial notification MUST include the following initialization parameters:
 
@@ -128,12 +138,12 @@ This object MUST maintain the following internal state:
 - `key_shares_count`: Total number of participants/shares; must match the value from the initialization parameters.
 - `key_shares_threshold`: Threshold value from the initialization parameters.
 - `key_share_ID`: Unique index identifying this participant and the share it will produce.
-- `base_secrets`: A list of Y private/public keypairs, where Y = `key_shares_threshold`.
-- `outgoing_partial_secrets`: A list of X private keys (one per participant), derived from the participant’s base secrets and intended to be shared with the other participants.
-- `incoming_partial_secrets`: A list of X private keys, received from other participants.
-- `verification_vectors`: A list of X public verification vectors, each consisting of Y public keys, received from the other participants and used to validate incoming partial secrets.
+- `base_secrets`: A list of `t` private/public keypairs, where `t = key_shares_threshold`.
+- `outgoing_partial_secrets`: A list of `n` private keys (one per participant), derived from the participant's base secrets and intended to be shared with the other participants.
+- `incoming_partial_secrets`: A list of `n` private keys, received from other participants.
+- `verification_vectors`: A list of `n` public verification vectors, each consisting of `t` public keys, received from the other participants and used to validate incoming partial secrets.
 - `key_share`: The final secret key, computed by this participant, representing its share in the distributed private key.
-- `aggregated_verification_vector`: A list of Y public keys representing aggregated commitments at each threshold index.
+- `aggregated_verification_vector`: A list of `t` public keys representing aggregated commitments at each threshold index.
 
 _Note_: In practice, only the first entry in the aggregated_public_keys list is used — it is the complete distributed public key. The remaining values are currently unused post-generation and may be omitted.
 
@@ -173,13 +183,14 @@ If more than `key_shares_count` candidates were initially notified and apply for
 ### Assignment of Key Share IDs
 
 Once the final set of participants is selected, the orchestrator deterministically assigns each one a unique `key_share_ID` in the range 
-1 to `key_shares_count`, using a standardized desterministic algorithm:
+1 to `key_shares_count`, using a standardized deterministic algorithm:
 
 One such algorithm might be:
 
 - Serialize participant data into a byte sequence for each candidate:
   - `key_shares_count` (1 byte)
   - `key_shares_threshold` (1 byte)
+  - A unique participant identifier (e.g., communication public key, 32 bytes)
   - The public keys from the verification vector, hexadecimal-serialized in binary (big-endian) format (96 characters each) and in order
 - Compute a SHA-256 hash of each participant's byte sequence.
 - Sort participants by the numerical value of their hash (interpreted as big-endian integers), smallest-first.
@@ -209,10 +220,10 @@ _Note_: In a standard or an implementation or protocol built on this specificati
 
 ### Exchange of Partial Secrets Between Participants
 
-Each participant MUST securely transmit their `outgoing_partial_secret`s intended for other participants, directly `to their respective recipients. Specifically:
+Each participant MUST securely transmit their `outgoing_partial_secret`s intended for other participants, directly to their respective recipients. Specifically:
 
-- Participant A MUST send its X-th `outgoing_partial_secret` to Participant B, where X is Participant B’s `key_share_ID`.
-- Upon receipt, Participant B MUST store this secret as the Y-th entry in its `incoming_partial_secrets`, where Y is Participant A’s `key_share_ID`.
+- Participant A MUST send its n-th `outgoing_partial_secret` to Participant B, where n is Participant B's `key_share_ID`.
+- Upon receipt, Participant B MUST store this secret as the m-th entry in its `incoming_partial_secrets`, where m is Participant A's `key_share_ID`.
 
 _Note_: Sending and receiving of partial secrets SHOULD NOT be assumed to occur over a single bi-directional connection, as that depends on deployment constraints.
 
@@ -221,7 +232,22 @@ _Note_: Sending and receiving of partial secrets SHOULD NOT be assumed to occur 
 Each pairwise exchange MUST occur over a private and authenticated channel. Valid mechanisms include:
 
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
-- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver’s pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
+- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
+
+#### Partial Secret Verification
+
+After receiving each `incoming_partial_secret` from participant A, participant B MUST verify its correctness against participant A's verification vector using the following formula:
+
+$$G \cdot s_{A \to B} = \sum_{j=0}^{t-1} (B^{ID})^j \cdot C_{A, j}$$
+
+Where:
+- $G$ is the generator point of the BLS12-381 curve
+- $s_{A \to B}$ is the partial secret sent from participant A to participant B
+- $B^{ID}$ is participant B's `key_share_ID`
+- $C_{A, j}$ is the j-th public key in participant A's verification vector
+- $t$ is the threshold value
+
+If this verification fails, participant B MUST immediately report the fault to the orchestrator, identifying participant A as the source of the invalid partial secret.
 
 #### Timeout Handling
 
@@ -231,11 +257,11 @@ If a participant fails to receive a valid `partial_secret` from another particip
 
 Each participant MUST perform the following:
 
-- Compute the secret share (key share) by evaluating its `incoming_partial_secrets` using the [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on its `incoming_partial_secrets`. Store the result in the `key_share` field of the key share generator object.
+- Compute the secret share (key share) by summing all validated `incoming_partial_secrets` modulo the curve order. Store the result in the `key_share` field of the key share generator object.
 - Derive the partial public key from the computed key share.
 - For each index M from 0 to `key_shares_threshold` − 1:
-  - Extract the M-th public key from every participant’s verification vector (in total, `key_shares_count` values).
-  - Order these public keys according to the participants’ `key_share_ID`s.
+  - Extract the M-th public key from every participant's verification vector (in total, `key_shares_count` values).
+  - Order these public keys according to the participants' `key_share_ID`s.
   - Aggregate them into a single public key using the BLS12-381 public key aggregation method.
   - Store the result as the M-th entry in the `aggregated_verification_vector` array.
 
@@ -257,7 +283,7 @@ The generation orchestrator MUST receive, from all participants and within a pre
 
 - A partial public key
 - An aggregated public key
-- A signature over a predetermined message using the participant’s key share (partial private key)
+- A signature over a predetermined message using the participant's key share (partial private key)
 
 If any of these are missing after the timeout, the orchestrator MUST mark the key generation as unsuccessful and notify all participants. It MAY attempt to identify the source of failure and MAY recommend or enforce corrective measures.
 
@@ -265,7 +291,16 @@ Once these have been received, the orchestrator MUST perform the following check
 
 #### Partial Public Key Validation
 
-- Partial public key derivation: Verify that each participant’s partial public key is consistent with its submitted verification vector and assigned `key_share_ID`s.
+The orchestrator MUST verify that each participant's partial public key is consistent with the submitted verification vectors and assigned `key_share_ID` using the following formula:
+
+$$PK_i = \sum_{j=1}^{n} \left( \sum_{m=0}^{t-1} (i^{ID})^m \cdot C_{j,m} \right)$$
+
+Where:
+- $PK_i$ is the partial public key submitted by participant $i$
+- $i^{ID}$ is participant $i$'s `key_share_ID`
+- $C_{j,m}$ is the $m$-th public key in participant $j$'s verification vector
+- $n$ is the total number of participants
+- $t$ is the threshold value
 
 #### Aggregated Public Key Validation
 
@@ -287,7 +322,7 @@ If any verification fails, the orchestrator MUST mark the process as unsuccessfu
 
 If all validations pass, the orchestrator MUST mark the key generation as successful and inform all participants accordingly.
 
-_Note_: The verified partial and aggregated public keys, as well as the aggregated signature, MAY serve additional purposes. For example, the aggregated signature can fulfill Ethereum’s validator requirement for a signed deposit message.
+_Note_: The verified partial and aggregated public keys, as well as the aggregated signature, MAY serve additional purposes. For example, the aggregated signature can fulfill Ethereum's validator requirement for a signed deposit message.
 
 #### Unsuccessful Completion
 
