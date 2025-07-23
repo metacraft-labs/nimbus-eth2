@@ -42,7 +42,7 @@
     - [Participant completion of key generation](#participant-completion-of-key-generation)
       - [On successful generation](#on-successful-generation)
       - [Cleanup](#cleanup)
-  - [Algorithms used in the distributed generation of distributed key shares](#algorithms-used-in-the-distributed-generation-of-distributed-key-shares)
+  - [Algorithms used in the distributed generation of key shares](#algorithms-used-in-the-distributed-generation-of-key-shares)
     - [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm)
     - [Polynomial evaluation algorithm](#polynomial-evaluation-algorithm)
   - [Exchanged data](#exchanged-data)
@@ -120,7 +120,7 @@ All keys and signatures mentioned here and below are BLS12-381 ones, conforming 
 
 ## Participating entities
 
-Exactly $n$ entities MUST participate in the generation process, where $n$ is the total number of key shares to be generated. Every participant generates one key share, which is a scalar in the BLS12-381 field.
+Exactly $n$ entities MUST participate in the generation process, where $n$ is the total number of key shares to be generated. Every participant generates one unique share.
 
 The participants MUST be able to communicate over private, authenticated, point-to-point channels.
 
@@ -205,7 +205,7 @@ Upon creating the local state, each candidate for participant MUST initialize th
 Once initialized, the local state MUST automatically generate secret coefficients by:
 
 - Obtaining a sufficient amount of randomness from a cryptographically secure source
-- Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm). Each private key is a scalar in $\mathbb{F}_r$, where $r$ is the BLS12-381 curve order.
+- Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm).
 
 _Note_: The `secret_coefficients` MUST NOT be derived from deterministic or low-entropy seeds such as hierarchical deterministic (HD) paths or mnemonic phrases. Exposure of such seeds would enable an attacker to reconstruct all key shares, compromising the entire distributed key.
 
@@ -295,13 +295,23 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 
 #### Verification
 
-After receiving a secret share, a participant MUST verify whether it is consistent with the polynomial commitments of the sender. This is done by applying [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) to the polynomial commitments of the sender, and the recipient's participant index. The resulting partial public key must match a public key derived from the received secret share. The verification equation is:
+After receiving a secret share, a participant MUST verify whether it is consistent with the polynomial commitments of the sender. This verification process ensures that the received secret share was correctly derived from the sender's polynomial.
+
+**Verification procedure:** Upon receiving share $s_{ij}$ from participant $i$, participant $j$ applies the [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) to the polynomial commitments of the sender and the recipient's participant index. The participant then checks that the public key corresponding to the received secret share matches the result of evaluating the sender's polynomial commitments at the recipient's index.
+
+The verification equation is:
 
 $$g^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
 
-where $s_{ij}$ is the secret share from participant $i$ to participant $j$, $C_{ik}$ is the $k$-th commitment in participant $i$'s polynomial commitments, $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold, and exponentiation is in the group $\mathbb{G}_1$.
+where:
+- $g^{s_{ij}}$ represents the public key corresponding to the received secret share $s_{ij}$
+- $\prod_{k=0}^{t-1} (C_{ik})^{j^k}$ represents the polynomial evaluation using the sender's commitments: the product of the sender's polynomial commitments evaluated at the recipient's index $j$
+- $s_{ij}$ is the secret share from participant $i$ to participant $j$
+- $C_{ik}$ is the $k$-th commitment in participant $i$'s polynomial commitments
+- $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold
+- All exponentiation occurs in the group $\mathbb{G}_1$
 
-If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation orchestrator.
+If the equation holds, it proves that the secret share is consistent with the polynomial commitments. If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation orchestrator.
 
 #### Timeout Handling
 
@@ -407,7 +417,7 @@ The algorithm here is used to generate a BLS12-381 keypair.
 
 It is based on [EIP-2333](https://eips.ethereum.org/EIPS/eip-2333), with one modification:
 
-- As the keypairs here are always generated from a random source and never from a parent key, the Lamport derivation stage was skipped.
+- Since keys are generated from fresh randomness (not via parent keys), we omit the intermediate Lamport key generation step described in EIP-2333.
 
 ---
 
@@ -458,8 +468,6 @@ Then calculate the BLS12-381 public key from the private key in the standard way
 ### Polynomial evaluation algorithm
 
 This algorithm is used in the calculation a distributed key share (a secret key) during the distributed generation of a distributed private key, using polynomial evaluation, possibly according to the [Horner's method](https://en.wikipedia.org/wiki/Horner%27s_method).
-
-**Note:** This evaluates the polynomial defined by the secret coefficients at a given index using methods like Horner's scheme, not Lagrange interpolation (which is used for reconstruction).
 
 A list of the `secret_coefficients` secret keys is used as polynomial coefficients.
 
@@ -838,9 +846,9 @@ Polynomial commitments: the same as for participant 1 local state
 ```
 1: 27aff86264f133203ea6bba06bd78f92ab13792575dae5740bfc99d066ecd4f0
 2: 53096d1b0bb637341b79b8e4cb58dcd23bcf4a63d2a18b588d5e32d19311235d
-3: aa6187e32976fc600a7a1349c0a1a4a4aeba0bf716c6049446a1b7ebf9012b24524c2b69f899bfdbc2d43ccd65e004cc
-4: 83584279fb7dbb134640a538eb2d8c3e379c75b3d7683b22458394c106f4c28b93d82bb40f50cd1ce173ded9c139a781
-5: 940217ff79a69ed7309c3fce8e1ff7de72ed5f3fdef6a6fe5f710174c120b353e282c987ebd4afde257a18ad04da8759
+3: 643756b8b2015bafbb900b24a7f5db2c6d1ab9cb972e57d8c8a2d93fa9ec4a54
+4: 5b39b53b57d2a0931ee9b26001ae8aa13ef5c75cc3814af4bdca8d1aab7e49d5
+5: 381088a2fd2a05de4586ae96d882eb30b1607317579a64ac6cd54e6297c721e0
 ```
 ## Generated partial public keys
 ```
@@ -864,4 +872,3 @@ Implementation exists in [Nim](https://gitlab.metacraft-labs.com/nimbus/nim-blsc
 # Copyright
 
 Copyright and related rights waived via [CC0](https://eips.ethereum.org/LICENSE).
-
