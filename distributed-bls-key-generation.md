@@ -7,7 +7,6 @@
   - [Participating entities](#participating-entities)
     - [Security consideration](#security-considerations)
     - [Orchestration](#orchestration)
-      - [Trust Assumptions](#trust-assumptions)
   - [Generation sequence](#generation-sequence)
     - [Initiation by the orchestrator](#initiation-by-the-orchestrator)
     - [Creation of Key Share Generator object](#creation-of-key-share-generator-object)
@@ -21,7 +20,6 @@
     - [Distribution of Verification Vectors](#distribution-of-verification-vectors)
     - [Exchange of Partial Secrets Between Participants](#exchange-of-partial-secrets-between-participants)
       - [Security Requirements for Transmission](#security-requirements-for-transmission)
-      - [Partial Secret Verification](#partial-secret-verification)
       - [Timeout Handling](#timeout-handling)
     - [Generating the Distributed Key Share and Aggregated Public Key](#generating-the-distributed-key-share-and-aggregated-public-key)
     - [Submission of Data to Orchestrator](#submission-of-data-to-orchestrator)
@@ -104,14 +102,6 @@ An entity - one of the participants or a separate component, potentially a smart
 - Determining the success or failure of the generation process, and identifying any misbehaving participants when possible
 
 The algorithms described in this document are designed to enable the orchestrator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
-
-#### Trust Assumptions
-
-The orchestrator's trust model significantly impacts the security guarantees of the distributed key generation:
-
-- **Trusted centralized orchestrator**: In this model, participants must trust the orchestrator to behave honestly and remain available. This creates a single point of failure where a compromised or malicious orchestrator could disrupt the process or bias key generation. However, this model simplifies implementation and reduces computational overhead.
-
-- **Trustless orchestrator**: A trustless orchestrator (such as a blockchain smart contract) requires cryptographic proofs of participant behavior and fault attribution. Participants submit zero-knowledge proofs or other cryptographic evidence that can be verified on-chain. This eliminates trust in the orchestrator but increases complexity and computational requirements.
 
 ## Generation sequence
 
@@ -232,22 +222,7 @@ _Note_: Sending and receiving of partial secrets SHOULD NOT be assumed to occur 
 Each pairwise exchange MUST occur over a private and authenticated channel. Valid mechanisms include:
 
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
-- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
-
-#### Partial Secret Verification
-
-After receiving each `incoming_partial_secret` from participant A, participant B MUST verify its correctness against participant A's verification vector using the following formula:
-
-$$G \cdot s_{A \to B} = \sum_{j=0}^{t-1} (B^{ID})^j \cdot C_{A, j}$$
-
-Where:
-- $G$ is the generator point of the BLS12-381 curve
-- $s_{A \to B}$ is the partial secret sent from participant A to participant B
-- $B^{ID}$ is participant B's `key_share_ID`
-- $C_{A, j}$ is the j-th public key in participant A's verification vector
-- $t$ is the threshold value
-
-If this verification fails, participant B MUST immediately report the fault to the orchestrator, identifying participant A as the source of the invalid partial secret.
+- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver’s pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
 
 #### Timeout Handling
 
@@ -257,11 +232,11 @@ If a participant fails to receive a valid `partial_secret` from another particip
 
 Each participant MUST perform the following:
 
-- Compute the secret share (key share) by summing all validated `incoming_partial_secrets` modulo the curve order. Store the result in the `key_share` field of the key share generator object.
+- Compute the secret share (key share) by evaluating its `incoming_partial_secrets` using the [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on its `incoming_partial_secrets`. Store the result in the `key_share` field of the key share generator object.
 - Derive the partial public key from the computed key share.
 - For each index M from 0 to `key_shares_threshold` − 1:
-  - Extract the M-th public key from every participant's verification vector (in total, `key_shares_count` values).
-  - Order these public keys according to the participants' `key_share_ID`s.
+  - Extract the M-th public key from every participant’s verification vector (in total, `key_shares_count` values).
+  - Order these public keys according to the participants’ `key_share_ID`s.
   - Aggregate them into a single public key using the BLS12-381 public key aggregation method.
   - Store the result as the M-th entry in the `aggregated_verification_vector` array.
 
@@ -291,16 +266,7 @@ Once these have been received, the orchestrator MUST perform the following check
 
 #### Partial Public Key Validation
 
-The orchestrator MUST verify that each participant's partial public key is consistent with the submitted verification vectors and assigned `key_share_ID` using the following formula:
-
-$$PK_i = \sum_{j=1}^{n} \left( \sum_{m=0}^{t-1} (i^{ID})^m \cdot C_{j,m} \right)$$
-
-Where:
-- $PK_i$ is the partial public key submitted by participant $i$
-- $i^{ID}$ is participant $i$'s `key_share_ID`
-- $C_{j,m}$ is the $m$-th public key in participant $j$'s verification vector
-- $n$ is the total number of participants
-- $t$ is the threshold value
+- Partial public key derivation: Verify that each participant’s partial public key is consistent with its submitted verification vector and assigned `key_share_ID`s.
 
 #### Aggregated Public Key Validation
 
