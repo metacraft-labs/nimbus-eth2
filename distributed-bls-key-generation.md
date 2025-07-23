@@ -94,14 +94,33 @@ The participants MUST be able to communicate over private, authenticated, point-
 
 ### Orchestration
 
-An entity - one of the participants or a separate component, potentially a smart contract - MUST act as the orchestrator of the process. While its implementation is outside the scope of this document, its responsibilities include:
+An entity - one of the participants or a separate component, potentially a smart contract - MUST act as the orchestrator of the process.
+
+The algorithms described in this document are designed to enable the orchestrator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
+
+#### Responsibilities
 
 - Initiating the protocol and setting key generation parameters
 - Selecting and coordinating the participants
 - Managing the steps of the protocol other than the partial secrets exchange between participants
 - Determining the success or failure of the generation process, and identifying any misbehaving participants when possible
 
-The algorithms described in this document are designed to enable the orchestrator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
+#### Trust model
+
+The orchestrator MUST follow either trusted or trustless model.
+
+In the former case, the orchestrator is assumed to be honest and available.
+
+In the latter case, the orchestrator is assumed to be a neutral arbiter, for example a smart contract. Implementation-defined mechanisms for verifying its honesty, and for dealing with possible lack of availability, MUST be provided.
+
+In both models, the participants MUST be able to submit to the orchestrator a cryptographic proof of misbehavior, for example a signed ZK proof. The orchestrator MUST then perform one of the following actions:
+
+- Challenge the suspected participant to provide the needed information in a verifiable way, for example by storing it in a blockchain. Preferably, this storing must involve some cost, to encourage participants to do what they can to avoid reaching this stage.
+  - If the information is determined again to be faulty, the orchestrator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving partticipant.
+  - If the information is determined to be correct, the orchestrator MUST store the information about the dispute and check previous dispute records for the involved participants.
+    - If a participant is frequently involved in dispute events with many different participants, the orchestrator MUST either escalate (for example, to notify upper levels of software and / or responsible persons), or trigger a mechanism for punishing it.
+    - If a participant is frequently involved in dispute events with a small number of participants, the orchestrator MUST escalate.
+- Directly trigger a mechanism for punishing the misbehaving participant, if it is determined reliably.
 
 ## Generation sequence
 
@@ -135,7 +154,7 @@ This object MUST maintain the following internal state:
 - `key_share`: The final secret key, computed by this participant, representing its share in the distributed private key.
 - `aggregated_verification_vector`: A list of `t` public keys representing aggregated commitments at each threshold index.
 
-_Note_: In practice, only the first entry in the aggregated_public_keys list is used — it is the complete distributed public key. The remaining values are currently unused post-generation and may be omitted.
+_Note_: In practice, only the first entry in the aggregated_verification_vector list is used — it is the complete distributed public key. The remaining values are currently unused post-generation and may be omitted.
 
 ### Initial Setup
 
@@ -157,18 +176,33 @@ _Note_: The `base_secrets` MUST NOT be derived from deterministic or low-entropy
 
 Following generation of `base_secrets`, the key share generator object MUST automatically:
 
-- Compute `key_shares_count` private/public keypairs, by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `base_secrets` private keys and a `key_share_ID` iterating from 1 to `key_shares_count`.
+- Compute `key_shares_count` private keys, by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `base_secrets` private keys and a `key_share_ID` iterating from 1 to `key_shares_count`.
 - Store the resulting private keys in an ordered list as `outgoing_partial_secrets`, indexed by the respective `key_share_ID` of the recipient participant.
 
 ### Submission of Verification Vector to Orchestrator
 
-Each candidate for participant MUST submit their `verification_vector` — an ordered array of public keys derived from the `base_secrets` — to the generation orchestrator as an application for participation in the generation process.
+Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `base_secrets` to the orchestrator. This commitment might be:
+
+- a `verification_vector` — an ordered array of public keys derived from the `base_secrets`
+- a hash on array of data, mandatorily including the `verification_vector`, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
+
+The applications for participation must be sortable through a standard deterministic algorithm - for example, by sorting hashes by value. The algorithm must be chosen so as to minimize the probability for sorting collisions, even as a result of collaboration between candidates to create one. 
 
 ### Orchestrator Processing of Verification Vectors
 
-The orchestrator MUST collect `verification vectors` from at least `key_shares_count` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
+The orchestrator MUST collect applications for participation from at least `key_shares_count` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
 
 If more than `key_shares_count` candidates were initially notified and apply for participation, the orchestrator MAY select among them exactly `key_shares_count` participants based on predefined selection criteria. These candidates become the participants in the key generation.
+
+#### Verification
+
+The collected applications must be checked at the end of the application period for sorting collisions. Should two or more application cause a sorting collision (for example, have the same hash), the candidates that produced them MUST NOT be accepted as generation participants.
+
+If that leaves fewer candidates for participants than the wanted count of key shares, the orchestrator MUST terminate the generation procedure. It also MAY terminate it even if there are enough candidates, just because a sorting collision is found.
+
+The orchestrator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation.
+
+#### Verification
 
 ### Assignment of Key Share IDs
 
@@ -185,6 +219,8 @@ One such algorithm might be:
 - Compute a SHA-256 hash of each participant's byte sequence.
 - Sort participants by the numerical value of their hash (interpreted as big-endian integers), smallest-first.
 - Assign `key_share_ID`s based on the sorted order: the first participant receives ID 1, the second receives 2, ..., up to `key_shares_count`.
+
+Should the 
 
 The orchestrator then MUST communicate the assigned `key_share_ID` to each participant.
 
@@ -224,15 +260,23 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
 - Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver’s pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
 
+#### Verification
+
+After receiving a partial secret, a participant MUST verify whether it is consistent with the `verification_vector` of the sender. This is done by applying [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) to the `verification_vector` of the sender, and the recipient's `key_share_ID`. The resulting partial public key must match a public key derived from the received `incoming_partial_secret`. If they do not match, the received `incoming_partial_secret` is considered not valid, and the participant MUST notify the generation orchestrator.
+
 #### Timeout Handling
 
-If a participant fails to receive a valid `partial_secret` from another participant within the expected timeframe, or if the received `incoming_partial_secret` is not valid, the participant MUST notify the generation orchestrator. The orchestrator MUST either declare the generation invalid, or MUST take measures to either provide a valid `partial_secret`, or to determine the faulty participant and to construct a proof for its fault.
+If a participant fails to receive a valid `partial_secret` from another participant within the expected timeframe, the participant MUST notify the generation orchestrator.
+
+#### On failure to receive a valid `incoming_partial_secret`
+
+If notified by a participant that a received `incoming_partial_secret` is not valid, or that one was not received within the expected timeframe, the orchestrator MUST either take measures to either provide a valid `partial_secret`, or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
 
 ### Generating the Distributed Key Share and Aggregated Public Key
 
 Each participant MUST perform the following:
 
-- Compute the secret share (key share) by evaluating its `incoming_partial_secrets` using the [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on its `incoming_partial_secrets`. Store the result in the `key_share` field of the key share generator object.
+- Compute the secret share (key share) by producing a sum of the `incoming_partial_secrets`, modulo the BLS12-381 curve order. Store the result in the `key_share` field of the key share generator object.
 - Derive the partial public key from the computed key share.
 - For each index M from 0 to `key_shares_threshold` − 1:
   - Extract the M-th public key from every participant’s verification vector (in total, `key_shares_count` values).
@@ -242,7 +286,7 @@ Each participant MUST perform the following:
 
 _Note_: This step MUST be automatically performed after receiving the final `incoming_partial_secret`.
 
-_Note_: In most use cases, only the first entry in `aggregated_public_keys` (i.e., index 0) is used. It corresponds to the public key associated with the final distributed private key. If other indices are not required for the application, their computation may be omitted to reduce overhead.
+_Note_: In most use cases, only the first entry in `aggregated_verification_vector` (i.e., index 0) is used. It corresponds to the public key associated with the final distributed private key. If other indices are not required for the application, their computation may be omitted to reduce overhead.
 
 ### Submission of Data to Orchestrator
 
@@ -266,7 +310,7 @@ Once these have been received, the orchestrator MUST perform the following check
 
 #### Partial Public Key Validation
 
-- Partial public key derivation: Verify that each participant’s partial public key is consistent with its submitted verification vector and assigned `key_share_ID`s.
+- Partial public key derivation: Verify that each participant’s partial public key is consistent with its submitted `verification_vector` and assigned `key_share_ID`s.
 
 #### Aggregated Public Key Validation
 
@@ -280,7 +324,7 @@ If any of these checks fails, the orchestrator MUST declare the generation unsuc
 After collecting all participant signatures, the orchestrator MUST verify:
 
 - That each individual signature is valid with respect to the corresponding partial public key.
-- That the aggregate of all signatures is valid under the aggregated public key.
+- That the aggregate of all signatures is valid with respect to the aggregated public key.
 
 If any verification fails, the orchestrator MUST mark the process as unsuccessful and notify participants. As before, it MAY attempt to attribute fault and take or propose appropriate action.
 
@@ -374,9 +418,9 @@ Then calculate the BLS12-381 public key from the private key in the standard way
 
 ### Polynomial evaluation algorithm
 
-This algorithm is used to calculate a distributed key share (a secret key) from `incoming_partial_secrets` (which are one `outgoing_partial_secret` from every participant) during the distributed generation of a distributed private key, using [Lagrange polynomial evaluation](https://en.wikipedia.org/wiki/Polynomial_evaluation), according to the [Horner's method](https://en.wikipedia.org/wiki/Horner%27s_method).
+This algorithm is used in the calculation a distributed key share (a secret key) during the distributed generation of a distributed private key, using [Lagrange polynomial evaluation](https://en.wikipedia.org/wiki/Polynomial_evaluation), possibly according to the [Horner's method](https://en.wikipedia.org/wiki/Horner%27s_method).
 
-A list of the `incoming_partial_secrets` secret keys is used as polynomial coefficients.
+A list of the `base_secrets` secret keys is used as polynomial coefficients.
 
 A 32-byte BLS12-381 big-endian scalar / Fr point is used as an index for this key share. It is obtained by converting the participant's `key_share_ID` to a 256-bit big-endian unsigned integer.
 
