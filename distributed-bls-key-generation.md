@@ -4,6 +4,10 @@
 - [Abstract](#abstract)
 - [A note on purpose](#a-note-on-purpose)
 - [Motivation](#motivation)
+  - [1. Solo Stakers](#1-solo-stakers)
+  - [2. Professional Node Operators](#2-professional-node-operators)
+  - [3. Liquid Staking Protocols](#3-liquid-staking-protocols)
+- [Acknowledgements](#acknowledgements)
 - [Specification](#specification)
   - [Participating entities](#participating-entities)
     - [Security considerations](#security-considerations)
@@ -64,20 +68,40 @@ This document describes an algorithm for securely generating threshold shares of
 
 # Abstract
 
-Distributed key generation enhances security by ensuring that no single participant ever possesses the complete private key. This algorithm enables the asynchronous creation of BLS12-381 private key shares by multiple parties, making it suitable for secure secure threshold signing in distributed systems.
+Distributed key generation enhances security by ensuring that no single participant ever possesses the complete private key. This algorithm enables the asynchronous creation of BLS12-381 private key shares by multiple parties, making it suitable for secure threshold signing in distributed systems.
 
 # A note on purpose
 
-This algorithm was originally developed for generating key shares for Ethereum consensus nodes that employ distributed signers or distributed (DVT) validator clusters. However, its applicability is broader—it can be used for any use case that requires distributed generation of BLS12-381 key shares.
+This algorithm was originally developed for generating key shares for Ethereum consensus nodes that employ distributed validators (DVT). However, its applicability is broader—it can be used for any use case requiring distributed generation of BLS12-381 key shares.
 
 # Motivation
 
-Ethereum validators sign their actions with a private key.
-To improve resilience and security, they increasingly use distributed signers, holding shares of the key, created according to the Shamir's Secret Sharing (SSS) scheme - a set of `n` signers, any `t` of which must sign a decision to make it valid (`t < n`).
+The primary motivation behind creating a standard specification for Distributed Key Generation (DKG) for Ethereum is to enhance resilience, security, interoperability, and fault tolerance across various staking setups. Existing distributed validator technology (DVT) implementations often focus on specific use cases, typically within liquid staking protocols. This open specification generalizes the benefits of distributed key management, benefiting a broader audience including:
 
-This approach improves availability — only `t` participants are needed to proceed — and security, as compromising the key requires access to at least `t` shares, held by different entities.
+## 1. Solo Stakers
 
-Traditionally, key shares are generated centrally and then distributed. This however creates a single point of failure where the full key exists. The algorithm described here avoids this by enabling each participant to generate their share independently, without any party ever learning the full key or another's share.
+Solo stakers managing their own validator nodes benefit  from increased resilience. By distributing key shares, they mitigate single points of failure, reducing the risk of downtime or slashing due to infrastructure issues or security incidents.
+
+## 2. Professional Node Operators
+
+Professional and institutional node operators face unique operational risks that distributed key generation effectively mitigates:
+
+* **Rogue Employees:**
+
+  * Employees with key access could maliciously or inadvertently compromise keys through theft, sale, or sabotage, causing financial losses or reputational harm.
+  * Disgruntled personnel could deliberately perform slashable actions or disrupt operations.
+
+* **Malicious Infrastructure Providers:**
+
+  * Authorized external personnel, such as maintenance technicians, could exploit privileged access, creating risks comparable to insider threats.
+
+## 3. Liquid Staking Protocols
+
+Liquid staking protocols would benefit from standardized DKG procedures implemented within the Ethereum client software. Such standardization enables them to integrate readily-available zero-knowledge proofs (ZKPs) for the verification of the DKG process, reducing complexity in their staker onboarding logic, and allowing protocol developers to concentrate on other critical aspects of their smart contract design.
+
+This specification provides a clear, detailed, and interoperable standard for distributed BLS12-381 key generation, promoting security, operational continuity, and resilience. Additionally, it fosters client diversity and ensures compatibility across multiple Ethereum client implementations.
+
+# Acknowledgements
 
 The design is inspired by the distributed key generation code and docs of [Dirk](https://github.com/attestantio/dirk/blob/master/docs/distributed_key_generation.md), written by Jim McDonald.
 
