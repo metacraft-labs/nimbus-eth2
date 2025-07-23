@@ -625,11 +625,11 @@ Example:
 
 # A test case
 
-Shows all values for every local state, at every processing stage, while generating a distributed key with 5 shares and threshold 3.
+Shows all values for every participant's local state, at every processing stage, while generating a distributed key with 5 shares and threshold 3.
 
 ## Generated seed data
 ```
-Local state 1:
+Participant 1 local state:
 
 Secret coefficient 1:
 Random seed = 6bc2a742a41408c99d1cb63a2364a003969889b939930915e448cdaa9901e2c8
@@ -653,7 +653,7 @@ Secret shares:
 4 = 5195a616fd4333fd2c360fe889a1572eca0960cf0289afeeaa4f13d6de0d513d
 5 = 379fbe7683b80df284efc8c5b8ddb500acad71d84c63537f4997d511a25a0173
 
-Local state 2:
+Participant 2 local state:
 
 Secret coefficient 1:
 Random seed = e60a00b0166be47e4428af1faa0eaf3e0517848b4686c04556a9895cb1656b47
@@ -677,7 +677,7 @@ Secret shares:
 4 = 0f123d51de134475637b4afa27dee378022bf6a44664e22f5c408e6b6d49c965
 5 = 1bda2bd3efdfbbce483f6a65c31d77b05f3d5f43913dbf07626f81edd151f269
 
-Local state 3:
+Participant 3 local state:
 
 Secret coefficient 1:
 Random seed = 00c7cb8c0dfb493ba109ca75d8362847aa750d0aa6937dd1e56f7d1c96dd17d9
@@ -701,7 +701,7 @@ Secret shares:
 4 = 0667f8a3e44c26ed8ab119ab02554f112f2fabec6d830ef7195c215781d52bd4
 5 = 06fb32482fa3cb504a087feb9da5bac324691bc6cff5193586bb060cd3cd3d20
 
-Local state 4:
+Participant 4 local state:
 
 Secret coefficient 1:
 Random seed = f1633b26f10aa7fcdc30f250e19a6a3a461b4c53e8b307149b5c2c62835b714a
@@ -725,7 +725,7 @@ Secret shares:
 4 = 400746a28609f00cee19595a3050cb1e0d1d6b97d6e1bdc77a3e4a1a5937cef3
 5 = 5976dad2b7a1eb3196b99e16b2eac0ce1490784cb311741747f0bbc2652c5b71
 
-Local state 5:
+Participant 5 local state:
 
 Secret coefficient 1:
 Random seed = 9ae4053bb8fbc1de2344157f5d989dfe68a77a5050ed3365bdf0c49184f31b06
@@ -751,7 +751,7 @@ Secret shares:
 ```
 ## Seed data after the exchange
 ```
-Local state 1:
+Participant 1 local state:
 
 Secret shares:
 1: 12cdb966d501b6b81afa5ad30dc81213219ac26e412db4e978e916a2e2fd93b2
@@ -787,7 +787,7 @@ Polynomial commitments:
     3: 83d53f13dbbb7dd228e7f259f14d3a59c1d654a872d588bf6db0251d2afb1075f84745b6478b3fdf0079ae972ede35bd
     ]
 
-Local state 2:
+Participant 2 local state:
 
 Secret shares:
 1: 0535cfe5911949bbdd9e6ceb2f4599b55aa137187cefb2a441f7b49ffe5f1a5c
@@ -796,9 +796,9 @@ Secret shares:
 4: 4ec60d6f285d21c4df26b19e5e5f158af9607c01709e9d42e9ffeb03a0fd18f7
 5: 48007dc3599a69761dbae90efc398d18708c7fc779a9cd838b29e991da155642
 
-Polynomial commitments: the same as for local state 1
+Polynomial commitments: the same as for participant 1 local state
 
-Local state 3:
+Participant 3 local state:
 
 Secret shares:
 1: 40c7abe6ac639d4049c59bf5066ea36b04054d39bd6324fafd19b3b0fcb9aee0
@@ -807,9 +807,9 @@ Secret shares:
 4: 15d2751048692dd09fd517da10ec4a05e8238b7dc0bc022bb04359db17d2b8ca
 5: 695988b678dd850c765eeb0ccc957bde8b8bcd080c694afaabf8660f7f6b74b2
 
-Polynomial commitments: the same as for local state 1
+Polynomial commitments: the same as for participant 1 local state
 
-Local state 4:
+Participant 4 local state:
 
 Secret shares:
 1: 5195a616fd4333fd2c360fe889a1572eca0960cf0289afeeaa4f13d6de0d513d
@@ -818,9 +818,9 @@ Secret shares:
 4: 400746a28609f00cee19595a3050cb1e0d1d6b97d6e1bdc77a3e4a1a5937cef3
 5: 281039df3bc38e6e49a7bc80272a0dd08a30fc68362c481723a07f65851a346d
 
-Polynomial commitments: the same as for local state 1
+Polynomial commitments: the same as for participant 1 local state
 
-Local state 5:
+Participant 5 local state:
 
 Secret shares:
 1: 379fbe7683b80df284efc8c5b8ddb500acad71d84c63537f4997d511a25a0173
@@ -828,7 +828,7 @@ Secret shares:
 3: 06fb32482fa3cb504a087feb9da5bac324691bc6cff5193586bb060cd3cd3d20
 4: 5976dad2b7a1eb3196b99e16b2eac0ce1490784cb311741747f0bbc2652c5b71
 
-Polynomial commitments: the same as for local state 1
+Polynomial commitments: the same as for participant 1 local state
 ```
 ## Generated key shares
 ```
