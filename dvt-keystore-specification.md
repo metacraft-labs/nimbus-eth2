@@ -32,11 +32,11 @@ This is not a final version of the document. The following problems must be solv
 
 This document describes a format for securely storing either:
 
-- a BLS12-381 partial secret key (key share), generated for usage within a DVT squad for threshold signing
+- a BLS12-381 partial secret key (key share), generated for usage within a DVT cluster for threshold signing
 - detailed log of the progress of the distributed key generation (DKG) protocol while the key share is being generated
 - configuration that utilize remote signers in various threshold signing scenarios
 
-The format can store also all supplementary information needed by DVT squad consensus protocols.
+The format can store also all supplementary information needed by DVT cluster consensus protocols.
 
 # Abstract
 
@@ -48,9 +48,9 @@ To enable such a storing and re-reading even after a software migration, a stand
 
 The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
 
-TODO: Add definition for DVT squad that references another spec.
+TODO: Add definition for DVT cluster that references another spec.
 TODO: Add definition for Threshold signing that references another spec.
-TODO: Add definition for DVT squad consensus protocol.
+TODO: Add definition for DVT cluster consensus protocol.
 TODO: Add definition for DKG that references another spec.
 
 # Motivation
@@ -763,7 +763,7 @@ The DVT keystore MUST be stored in JSON format.
 ##### HotStuff configuration
 
 Future versions of this format MAY add support for more consensus algorithms and / or other types of sensitive information.
-As an example, consider the potential addition of Hotstuff as a DVT squad consensus protocol. The following DVT keystore might become a valid configuration:
+As an example, consider the potential addition of Hotstuff as a DVT cluster consensus protocol. The following DVT keystore might become a valid configuration:
 
 ```
 {
