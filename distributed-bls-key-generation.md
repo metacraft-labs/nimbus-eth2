@@ -1,36 +1,42 @@
 # Contents
-- [Simple Summary](#simple-summary)
+- [Contents](#contents)
+- [Simple summary](#simple-summary)
 - [Abstract](#abstract)
 - [A note on purpose](#a-note-on-purpose)
 - [Motivation](#motivation)
 - [Specification](#specification)
   - [Participating entities](#participating-entities)
-    - [Security consideration](#security-considerations)
+    - [Security considerations](#security-considerations)
     - [Orchestration](#orchestration)
+      - [Responsibilities](#responsibilities)
+      - [Trust model](#trust-model)
   - [Generation sequence](#generation-sequence)
     - [Initiation by the orchestrator](#initiation-by-the-orchestrator)
-    - [Creation of Key Share Generator object](#creation-of-key-share-generator-object)
+    - [Creation of key share generator object](#creation-of-key-share-generator-object)
     - [Initial setup](#initial-setup)
-    - [Generation of Base Secrets](#generation-of-base-secrets)
-    - [Generation of Outgoing Partial Secrets](#generation-of-outgoing-partial-secrets)
-    - [Submission of Verification Vector to Orchestrator](#submission-of-verification-vector-to-orchestrator)
-    - [Orchestrator Processing of Verification Vectors](#orchestrator-processing-of-verification-vectors)
-    - [Assignment of Key Share IDs](#assignment-of-key-share-ids)
-    - [Storing Own-Bound Verification Vectors and Incoming Secrets](#storing-own-bound-verification-vectors-and-incoming-secrets)
-    - [Distribution of Verification Vectors](#distribution-of-verification-vectors)
-    - [Exchange of Partial Secrets Between Participants](#exchange-of-partial-secrets-between-participants)
-      - [Security Requirements for Transmission](#security-requirements-for-transmission)
+    - [Generation of base secrets](#generation-of-base-secrets)
+    - [Generation of outgoing partial secrets](#generation-of-outgoing-partial-secrets)
+    - [Submission of verification vector to orchestrator](#submission-of-verification-vector-to-orchestrator)
+    - [Orchestrator processing of verification vectors](#orchestrator-processing-of-verification-vectors)
+      - [Verification](#verification)
+    - [Assignment of key share IDs](#assignment-of-key-share-ids)
+    - [Storing own-bound verification vectors and incoming secrets](#storing-own-bound-verification-vectors-and-incoming-secrets)
+    - [Distribution of verification vectors](#distribution-of-verification-vectors)
+    - [Exchange of partial secrets between participants](#exchange-of-partial-secrets-between-participants)
+      - [Security requirements for transmission](#security-requirements-for-transmission)
+      - [Verification](#verification-1)
       - [Timeout Handling](#timeout-handling)
-    - [Generating the Distributed Key Share and Aggregated Public Key](#generating-the-distributed-key-share-and-aggregated-public-key)
-    - [Submission of Data to Orchestrator](#submission-of-data-to-orchestrator)
-    - [Orchestrator Validation of Results](#orchestrator-validation-of-results)
-      - [Partial Public Key Validation](#partial-public-key-validation)
-      - [Aggregated Public Key Validation](#aggregated-public-key-validation)
-      - [Signature Validation](#signature-validation)
-      - [Successful Completion](#successful-completion)
-      - [Unsuccessful Completion](#unsuccessful-completion)
-    - [Participant Completion of Key Generation](#participant-completion-of-key-generation)
-      - [On Successful Generation](#on-successful-generation)
+      - [On failure to receive a valid `incoming_partial_secret`](#on-failure-to-receive-a-valid-incoming_partial_secret)
+    - [Generating the distributed key share and aggregated public key](#generating-the-distributed-key-share-and-aggregated-public-key)
+    - [Submission of data to orchestrator](#submission-of-data-to-orchestrator)
+    - [Orchestrator validation of results](#orchestrator-validation-of-results)
+      - [Partial public key validation](#partial-public-key-validation)
+      - [Aggregated public key validation](#aggregated-public-key-validation)
+      - [Signature validation](#signature-validation)
+      - [Successful completion](#successful-completion)
+      - [Unsuccessful completion](#unsuccessful-completion)
+    - [Participant completion of key generation](#participant-completion-of-key-generation)
+      - [On successful generation](#on-successful-generation)
       - [Cleanup](#cleanup)
   - [Algorithms used in the distributed generation of distributed key shares](#algorithms-used-in-the-distributed-generation-of-distributed-key-shares)
     - [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm)
@@ -43,17 +49,22 @@
     - [Exchanged shared secret](#exchanged-shared-secret)
     - [Generated partial and aggregate public keys](#generated-partial-and-aggregate-public-keys)
     - [Signature for verification](#signature-for-verification)
-- [A Test Case](#a-test-case)
+- [A test case](#a-test-case)
+  - [Generated seed data](#generated-seed-data)
+  - [Seed data after the exchange](#seed-data-after-the-exchange)
+  - [Generated key shares](#generated-key-shares)
+  - [Generated key share public keys](#generated-key-share-public-keys)
+  - [Aggregated public keys](#aggregated-public-keys)
 - [Implementation](#implementation)
 - [Copyright](#copyright)
 
-# Simple Summary
+# Simple summary
 
-This document describes an algorithm for securely generating secret shares of a BLS12-381 private key in a distributed manner, without ever assembling the full key in one place.
+This document describes an algorithm for securely generating threshold shares of a BLS12-381 private key in a distributed manner, without ever assembling the full key in one place.
 
 # Abstract
 
-Distributed key generation enhances security by ensuring that no single participant ever possesses the complete private key. This algorithm enables the asynchronous creation of BLS12-381 private key shares by multiple parties, making it suitable for secure signing or encryption in distributed systems.
+Distributed key generation enhances security by ensuring that no single participant ever possesses the complete private key. This algorithm enables the asynchronous creation of BLS12-381 private key shares by multiple parties, making it suitable for secure secure threshold signing in distributed systems.
 
 # A note on purpose
 
@@ -87,7 +98,7 @@ Exactly `n` entities MUST participate in the generation process, where `n` is th
 
 The participants MUST be able to communicate over private, authenticated, point-to-point channels.
 
-### Security Considerations
+### Security considerations
 
 - Every participant MUST be operated by different personnel. No personnel member should have access to more than one participant, limiting the impact of insider threats.
 - All accesses to key shares by personnel SHOULD be logged in a tamper-proof, auditable system that is immutable for any individual or supervisory entity involved with the distributed key. This prevents undetected key compromise or deletion.
@@ -126,7 +137,7 @@ In both models, the participants MUST be able to submit to the orchestrator a cr
 
 Consists of the following steps:
 
-### Initiation by the Orchestrator
+### Initiation by the orchestrator
 
 The orchestrator initiates the process by notifying a set of entities capable of acting as participants in distributed key generation.
 
@@ -138,7 +149,7 @@ The initial notification MUST include the following initialization parameters:
 - `key_shares_count`: A positive integer specifying the total number of key shares to be generated. This value MUST equal the number of selected participants and MUST be at least 2. It MUST be the same for all participants.
 - `key_shares_threshold`: A positive integer representing the minimum number of shares required to reconstruct the private key or to produce a valid threshold signature. This value MUST be less than or equal to `key_shares_count`, and MUST be the same for all participants.
 
-### Creation of Key Share Generator object
+### Creation of key share generator object
 
 Each candidate participant MUST initialize a key share generator object responsible for managing local state throughout the key generation process.
 
@@ -156,14 +167,14 @@ This object MUST maintain the following internal state:
 
 _Note_: In practice, only the first entry in the aggregated_verification_vector list is used — it is the complete distributed public key. The remaining values are currently unused post-generation and may be omitted.
 
-### Initial Setup
+### Initial setup
 
 Upon creating the key share generator object, each candidate for participant MUST initialize the following fields with the generation parameters:
 
 - `key_shares_count`
 - `key_shares_threshold`
 
-### Generation of Base Secrets
+### Generation of base secrets
 
 Once initialized, the key share generator object MUST automatically generate its base secrets by:
 
@@ -172,14 +183,14 @@ Once initialized, the key share generator object MUST automatically generate its
 
 _Note_: The `base_secrets` MUST NOT be derived from deterministic or low-entropy seeds such as hierarchical deterministic (HD) paths or mnemonic phrases. Exposure of such seeds would enable an attacker to reconstruct all key shares, compromising the entire distributed key.
 
-### Generation of Outgoing Partial Secrets
+### Generation of outgoing partial secrets
 
 Following generation of `base_secrets`, the key share generator object MUST automatically:
 
 - Compute `key_shares_count` private keys, by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `base_secrets` private keys and a `key_share_ID` iterating from 1 to `key_shares_count`.
 - Store the resulting private keys in an ordered list as `outgoing_partial_secrets`, indexed by the respective `key_share_ID` of the recipient participant.
 
-### Submission of Verification Vector to Orchestrator
+### Submission of verification vector to orchestrator
 
 Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `base_secrets` to the orchestrator. This commitment might be:
 
@@ -188,7 +199,7 @@ Each candidate for participant MUST submit, as an application for participation 
 
 The applications for participation must be sortable through a standard deterministic algorithm - for example, by sorting hashes by value. The algorithm must be chosen so as to minimize the probability for sorting collisions, even as a result of collaboration between candidates to create one. 
 
-### Orchestrator Processing of Verification Vectors
+### Orchestrator processing of verification vectors
 
 The orchestrator MUST collect applications for participation from at least `key_shares_count` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
 
@@ -202,9 +213,7 @@ If that leaves fewer candidates for participants than the wanted count of key sh
 
 The orchestrator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation.
 
-#### Verification
-
-### Assignment of Key Share IDs
+### Assignment of key share IDs
 
 Once the final set of participants is selected, the orchestrator deterministically assigns each one a unique `key_share_ID` in the range 
 1 to `key_shares_count`, using a standardized deterministic algorithm:
@@ -224,7 +233,7 @@ Should the
 
 The orchestrator then MUST communicate the assigned `key_share_ID` to each participant.
 
-### Storing Own-Bound Verification Vectors and Incoming Secrets
+### Storing own-bound verification vectors and incoming secrets
 
 After receiving their `key_share_ID`, each participant MUST:
 
@@ -236,7 +245,7 @@ _Note_: `key_share_ID`s can be pre-assigned along with the generation parameters
 - Trust assumption increase: Participants must fully trust the orchestrator to assign IDs honestly.
 - ZKP compatibility: Pre-assigned IDs not derived deterministically from in-protocol values may complicate or prevent the construction of zero-knowledge proofs of correctness.
 
-### Distribution of Verification Vectors
+### Distribution of verification vectors
 
 Once `key_share_ID`s have been assigned, the orchestrator MUST send each participant the full list of `verification vectors` — one for each participant — as a confirmation of inclusion in the generation process. The participant's own vector MAY be omitted, as it is already known locally. The `key_share_ID` of every other participant is deduced by the position of their `verification_vector` in the list.
 
@@ -244,7 +253,7 @@ Participants that do not receive this confirmation within a predefined timeout M
 
 _Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with `key_share_ID` assignment. In the latter case, the participant's own vector MUST be included, so that the receiver may determine its own `key_share_ID` by its position in the list. The verification vectors MAY be exchanged directly by the participants over a point-to-point channel, as long as the orchestrator records a commitment for their values.
 
-### Exchange of Partial Secrets Between Participants
+### Exchange of partial secrets between participants
 
 Each participant MUST securely transmit their `outgoing_partial_secret`s intended for other participants, directly to their respective recipients. Specifically:
 
@@ -253,7 +262,7 @@ Each participant MUST securely transmit their `outgoing_partial_secret`s intende
 
 _Note_: Sending and receiving of partial secrets SHOULD NOT be assumed to occur over a single bi-directional connection, as that depends on deployment constraints.
 
-#### Security Requirements for Transmission
+#### Security requirements for transmission
 
 Each pairwise exchange MUST occur over a private and authenticated channel. Valid mechanisms include:
 
@@ -272,7 +281,7 @@ If a participant fails to receive a valid `partial_secret` from another particip
 
 If notified by a participant that a received `incoming_partial_secret` is not valid, or that one was not received within the expected timeframe, the orchestrator MUST either take measures to either provide a valid `partial_secret`, or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
 
-### Generating the Distributed Key Share and Aggregated Public Key
+### Generating the distributed key share and aggregated public key
 
 Each participant MUST perform the following:
 
@@ -288,7 +297,7 @@ _Note_: This step MUST be automatically performed after receiving the final `inc
 
 _Note_: In most use cases, only the first entry in `aggregated_verification_vector` (i.e., index 0) is used. It corresponds to the public key associated with the final distributed private key. If other indices are not required for the application, their computation may be omitted to reduce overhead.
 
-### Submission of Data to Orchestrator
+### Submission of data to orchestrator
 
 Each participant MUST send to the orchestrator:
 
@@ -296,7 +305,7 @@ Each participant MUST send to the orchestrator:
 - The aggregated public key at index 0 (i.e., the combined public key for the distributed private key).
 - A signature over a predetermined message, using the computed private key share. This serves as proof of key share possession and correctness.
 
-### Orchestrator Validation of Results
+### Orchestrator validation of results
 
 The generation orchestrator MUST receive, from all participants and within a predefined timeout:
 
@@ -308,18 +317,18 @@ If any of these are missing after the timeout, the orchestrator MUST mark the ke
 
 Once these have been received, the orchestrator MUST perform the following checks:
 
-#### Partial Public Key Validation
+#### Partial public key validation
 
 - Partial public key derivation: Verify that each participant’s partial public key is consistent with its submitted `verification_vector` and assigned `key_share_ID`s.
 
-#### Aggregated Public Key Validation
+#### Aggregated public key validation
 
 - Aggregated public key consistency: Verify that all participants submitted the same aggregated public key.
 - Aggregated public key correctness: Confirm that the aggregation of all partial public keys matches the submitted aggregated public key.
 
 If any of these checks fails, the orchestrator MUST declare the generation unsuccessful and inform participants. It MAY identify the misbehaving party and MAY take or suggest remedial action.
 
-#### Signature Validation
+#### Signature validation
 
 After collecting all participant signatures, the orchestrator MUST verify:
 
@@ -328,23 +337,23 @@ After collecting all participant signatures, the orchestrator MUST verify:
 
 If any verification fails, the orchestrator MUST mark the process as unsuccessful and notify participants. As before, it MAY attempt to attribute fault and take or propose appropriate action.
 
-#### Successful Completion
+#### Successful completion
 
 If all validations pass, the orchestrator MUST mark the key generation as successful and inform all participants accordingly.
 
 _Note_: The verified partial and aggregated public keys, as well as the aggregated signature, MAY serve additional purposes. For example, the aggregated signature can fulfill Ethereum's validator requirement for a signed deposit message.
 
-#### Unsuccessful Completion
+#### Unsuccessful completion
 
 If one or more validations fail, the orchestrator MUST declare the key generation as unsuccessful and inform all participants accordingly.
 
-### Participant Completion of Key Generation
+### Participant completion of key generation
 
 Each participant concludes its involvement in the distributed key generation upon receiving a final status message from the orchestrator indicating whether the process was successful or unsuccessful.
 
 If no such message is received within a predetermined timeout, the participant MUST treat the key generation as unsuccessful.
 
-#### On Successful Generation
+#### On successful generation
 
 If the generation is confirmed as successful, the participant MUST persist the following in its secure information storage:
 
@@ -582,11 +591,11 @@ Example:
 }
 ```
 
-# A Test Case
+# A test case
 
 Shows all values for every key share generator object, at every processing stage, while generating a distributed key with 5 shares and threshold 3.
 
-## Generated seed data:
+## Generated seed data
 ```
 Key share generator object 1:
 
@@ -708,7 +717,7 @@ Shared secrets:
 4 = 281039df3bc38e6e49a7bc80272a0dd08a30fc68362c481723a07f65851a346d
 5 = 6bffdfe3f587802bfe090d791f3af2f913f755edf6ef7cd6f2223591eb219575
 ```
-## Seed data after the exchange:
+## Seed data after the exchange
 ```
 Key share generator object 1:
 
@@ -790,7 +799,7 @@ Shared secrets:
 
 Verification vectors: the same as for key share generator object 1
 ```
-## Generated key shares:
+## Generated key shares
 ```
 1: 27aff86264f133203ea6bba06bd78f92ab13792575dae5740bfc99d066ecd4f0
 2: 53096d1b0bb637341b79b8e4cb58dcd23bcf4a63d2a18b588d5e32d19311235d
@@ -798,7 +807,7 @@ Verification vectors: the same as for key share generator object 1
 4: 5b39b53b57d2a0931ee9b26001ae8aa13ef5c75cc3814af4bdca8d1aab7e49d5
 5: 381088a2fd2a05de4586ae96d882eb30b1607317579a64ac6cd54e6297c721e0
 ```
-## Generated key share public keys:
+## Generated key share public keys
 ```
 1: 957500c3225b58630e77c8dee72c2b45abc1b90974bd05bb4d7cdd2d74281e401fa868cc4471a4cf85de75fa704fdd2b
 2: b3a07093fa830b3a6bb65e2d187fa51f34092d7a5e7ac6963537fd75bd768cecfbd8702d8d73b70b4c293766740d2d83
@@ -806,7 +815,7 @@ Verification vectors: the same as for key share generator object 1
 4: 83584279fb7dbb134640a538eb2d8c3e379c75b3d7683b22458394c106f4c28b93d82bb40f50cd1ce173ded9c139a781
 5: 940217ff79a69ed7309c3fce8e1ff7de72ed5f3fdef6a6fe5f710174c120b353e282c987ebd4afde257a18ad04da8759
 ```
-## Aggregated public keys:
+## Aggregated public keys
 ```
 1: 9126a6ab52aa01ad6827bc278237d7a8f43f0dd17c66f687d31aa5ecff28d90dd9dc2e008588327a7486231039363c5f
 2: b42bca4d293830516aed25d9026969ff86f5020fda3e1127885ed9c9e6ba7f94e24778ed62558f0a5dd6375d009827e1
