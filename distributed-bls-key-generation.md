@@ -57,7 +57,7 @@
   - [Generated seed data](#generated-seed-data)
   - [Seed data after the exchange](#seed-data-after-the-exchange)
   - [Generated key shares](#generated-key-shares)
-  - [Generated key share public keys](#generated-key-share-public-keys)
+  - [Generated partial public keys](#generated-partial-public-keys)
   - [Threshold public keys](#threshold-public-keys)
 - [Implementation](#implementation)
 - [Copyright](#copyright)
@@ -116,9 +116,11 @@ or to sign the same data so that the signatures can be aggregated into a signatu
 
 All keys and signatures mentioned here and below are BLS12-381 ones, conforming to [EIP-2333](https://eips.ethereum.org/EIPS/eip-2333).
 
+**Note on mathematical notation:** We use multiplicative notation for the elliptic curve group operations, where $g$ is the generator of $\mathbb{G}_1$ (the group containing BLS public keys in Ethereum's BLS12-381 implementation). All private keys and shares are scalars in $\mathbb{F}_r$, where $r$ is the BLS12-381 curve order.
+
 ## Participating entities
 
-Exactly $n$ entities MUST participate in the generation process, where $n$ is the total number of key shares to be generated. Every participant generates one unique share.
+Exactly $n$ entities MUST participate in the generation process, where $n$ is the total number of key shares to be generated. Every participant generates one key share, which is a scalar in the BLS12-381 field.
 
 The participants MUST be able to communicate over private, authenticated, point-to-point channels.
 
@@ -151,7 +153,7 @@ In the latter case, the orchestrator is assumed to be a neutral arbiter, for exa
 In both models, the participants MUST be able to submit to the orchestrator a cryptographic proof of misbehavior, for example a signed ZK proof. The orchestrator MUST then perform one of the following actions:
 
 - Challenge the suspected participant to provide the needed information in a verifiable way, for example by storing it in a blockchain. Preferably, this storing must involve some cost, to encourage participants to do what they can to avoid reaching this stage.
-  - If the information is determined again to be faulty, the orchestrator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving partticipant.
+  - If the information is determined again to be faulty, the orchestrator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving participant.
   - If the information is determined to be correct, the orchestrator MUST store the information about the dispute and check previous dispute records for the involved participants.
     - If a participant is frequently involved in dispute events with many different participants, the orchestrator MUST either escalate (for example, to notify upper levels of software and / or responsible persons), or trigger a mechanism for punishing it.
     - If a participant is frequently involved in dispute events with a small number of participants, the orchestrator MUST escalate.
@@ -203,7 +205,7 @@ Upon creating the local state, each candidate for participant MUST initialize th
 Once initialized, the local state MUST automatically generate secret coefficients by:
 
 - Obtaining a sufficient amount of randomness from a cryptographically secure source
-- Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm)
+- Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm). Each private key is a scalar in $\mathbb{F}_r$, where $r$ is the BLS12-381 curve order.
 
 _Note_: The `secret_coefficients` MUST NOT be derived from deterministic or low-entropy seeds such as hierarchical deterministic (HD) paths or mnemonic phrases. Exposure of such seeds would enable an attacker to reconstruct all key shares, compromising the entire distributed key.
 
@@ -218,7 +220,7 @@ Following generation of `secret_coefficients`, the local state MUST automaticall
 
 Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `secret_coefficients` to the orchestrator. This commitment might be:
 
-- polynomial commitments $C_i = \{G_2^{a_{i0}}, G_2^{a_{i1}}, \ldots, G_2^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
+- polynomial commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
 - a hash on array of data, mandatorily including the polynomial commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
 
 The applications for participation must be sortable through a standard deterministic algorithm - for example, by sorting hashes by value. The algorithm must be chosen so as to minimize the probability for sorting collisions, even as a result of collaboration between candidates to create one. 
@@ -289,15 +291,15 @@ _Note_: Sending and receiving of secret shares SHOULD NOT be assumed to occur ov
 Each pairwise exchange MUST occur over a private and authenticated channel. Valid mechanisms include:
 
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
-- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys MUST be exchanged and authenticated in advance using a trusted method.
+- Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys for encryption MUST be authenticated via a trusted channel (e.g., on-chain registry or pre-established secure communication).
 
 #### Verification
 
 After receiving a secret share, a participant MUST verify whether it is consistent with the polynomial commitments of the sender. This is done by applying [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) to the polynomial commitments of the sender, and the recipient's participant index. The resulting partial public key must match a public key derived from the received secret share. The verification equation is:
 
-$$G_2^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
+$$g^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
 
-where $s_{ij}$ is the secret share from participant $i$ to participant $j$, and $C_{ik}$ is the $k$-th commitment in participant $i$'s polynomial commitments.
+where $s_{ij}$ is the secret share from participant $i$ to participant $j$, $C_{ik}$ is the $k$-th commitment in participant $i$'s polynomial commitments, $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold, and exponentiation is in the group $\mathbb{G}_1$.
 
 If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation orchestrator.
 
@@ -307,7 +309,7 @@ If a participant fails to receive a valid secret share from another participant 
 
 #### On failure to receive a valid secret share
 
-If notified by a participant that a received secret share is not valid, or that one was not received within the expected timeframe, the orchestrator MUST either take measures to either provide a valid secret share, or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
+If notified by a participant that a received secret share is not valid, or that one was not received within the expected timeframe, the orchestrator MUST either take measures to either provide a valid secret share (e.g., via challenge mechanisms requiring the sender to provide verifiable proof, or through resharing protocols), or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
 
 ### Generating the distributed key share and threshold public key
 
@@ -395,9 +397,9 @@ These values are to be retained and used as intended by the application (e.g., t
 
 Regardless of outcome, after the result is processed:
 
-- The participant MUST securely destroy the local state used during the process, including any temporary secrets or intermediate state.
+- The participant MUST securely destroy the local state used during the process, including any temporary secrets or intermediate state. Secure deletion MUST use methods like overwriting memory multiple times to prevent recovery of sensitive data.
 
-## Algorithms used in the distributed generation of distributed key shares
+## Algorithms used in the distributed generation of key shares
 
 ### BLS12-381 keypair generation algorithm
 
@@ -417,11 +419,11 @@ To calculate the secret key, proceed with the following steps:
 
 - Calculate a value called here `L`, by the following formula:
 
-  `L - ceil((3 * ceil(log2(r))) / 16)`
+  `L = ceil((3 * ceil(log2(r))) / 16)`
 
   (Should be 48.)
 
-- Asssign the string "BLS-SIG-KEYGEN-SALT-" as an array of bytes to a 20-byte valie called here `salt`:
+- Assign the string "BLS-SIG-KEYGEN-SALT-" as an array of bytes to a 20-byte value called here `salt`:
 
   `salt = "BLS-SIG-KEYGEN-SALT-"`
 
@@ -455,7 +457,9 @@ Then calculate the BLS12-381 public key from the private key in the standard way
 
 ### Polynomial evaluation algorithm
 
-This algorithm is used in the calculation a distributed key share (a secret key) during the distributed generation of a distributed private key, using [Lagrange polynomial evaluation](https://en.wikipedia.org/wiki/Polynomial_evaluation), possibly according to the [Horner's method](https://en.wikipedia.org/wiki/Horner%27s_method).
+This algorithm is used in the calculation a distributed key share (a secret key) during the distributed generation of a distributed private key, using polynomial evaluation, possibly according to the [Horner's method](https://en.wikipedia.org/wiki/Horner%27s_method).
+
+**Note:** This evaluates the polynomial defined by the secret coefficients at a given index using methods like Horner's scheme, not Lagrange interpolation (which is used for reconstruction).
 
 A list of the `secret_coefficients` secret keys is used as polynomial coefficients.
 
@@ -834,11 +838,11 @@ Polynomial commitments: the same as for participant 1 local state
 ```
 1: 27aff86264f133203ea6bba06bd78f92ab13792575dae5740bfc99d066ecd4f0
 2: 53096d1b0bb637341b79b8e4cb58dcd23bcf4a63d2a18b588d5e32d19311235d
-3: 643756b8b2015bafbb900b24a7f5db2c6d1ab9cb972e57d8c8a2d93fa9ec4a54
-4: 5b39b53b57d2a0931ee9b26001ae8aa13ef5c75cc3814af4bdca8d1aab7e49d5
-5: 381088a2fd2a05de4586ae96d882eb30b1607317579a64ac6cd54e6297c721e0
+3: aa6187e32976fc600a7a1349c0a1a4a4aeba0bf716c6049446a1b7ebf9012b24524c2b69f899bfdbc2d43ccd65e004cc
+4: 83584279fb7dbb134640a538eb2d8c3e379c75b3d7683b22458394c106f4c28b93d82bb40f50cd1ce173ded9c139a781
+5: 940217ff79a69ed7309c3fce8e1ff7de72ed5f3fdef6a6fe5f710174c120b353e282c987ebd4afde257a18ad04da8759
 ```
-## Generated key share public keys
+## Generated partial public keys
 ```
 1: 957500c3225b58630e77c8dee72c2b45abc1b90974bd05bb4d7cdd2d74281e401fa868cc4471a4cf85de75fa704fdd2b
 2: b3a07093fa830b3a6bb65e2d187fa51f34092d7a5e7ac6963537fd75bd768cecfbd8702d8d73b70b4c293766740d2d83
