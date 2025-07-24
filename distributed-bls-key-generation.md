@@ -2,18 +2,14 @@
 - [Contents](#contents)
 - [Simple summary](#simple-summary)
 - [Abstract](#abstract)
-- [A note on purpose](#a-note-on-purpose)
 - [Motivation](#motivation)
-  - [1. Solo stakers](#1-solo-stakers)
-  - [2. Professional node operators](#2-professional-node-operators)
-  - [3. Liquid staking protocols](#3-liquid-staking-protocols)
 - [Acknowledgements](#acknowledgements)
 - [Specification](#specification)
   - [Participating entities](#participating-entities)
     - [Security considerations](#security-considerations)
     - [Coordination](#coordination)
       - [Responsibilities](#responsibilities)
-      - [Trust model](#trust-model)
+      - [Trust Model](#trust-model)
   - [Generation sequence](#generation-sequence)
     - [Initiation by the coordinator](#initiation-by-the-coordinator)
     - [Creation of local state](#creation-of-local-state)
@@ -64,40 +60,36 @@
 
 # Simple summary
 
-This document describes an algorithm for securely generating threshold shares of a BLS12-381 private key in a distributed manner, without ever assembling the full key in one place.
+This document describes a protocol for the distributed generation of a (t,n)-threshold BLS12-381 private key and its key shares, without ever exposing the full key to any of the participants.
 
 # Abstract
 
 Distributed key generation enhances security by ensuring that no single participant ever possesses the complete private key. This algorithm enables the asynchronous creation of BLS12-381 private key shares by multiple parties, making it suitable for secure threshold signing in distributed systems.
 
-# A note on purpose
-
-This algorithm was originally developed for generating key shares for Ethereum consensus nodes that employ distributed validators (DVT). However, its applicability is broader—it can be used for any use case requiring distributed generation of BLS12-381 key shares.
-
 # Motivation
 
 The primary motivation behind creating a standard specification for Distributed Key Generation (DKG) for Ethereum is to enhance resilience, security, interoperability, and fault tolerance across various staking setups. Existing distributed validator technology (DVT) implementations often focus on specific use cases, typically within liquid staking protocols. This open specification generalizes the benefits of distributed key management, benefiting a broader audience including:
 
-## 1. Solo stakers
+* **1. Solo stakers**
 
-Solo stakers managing their own validator nodes benefit  from increased resilience. By distributing key shares, they mitigate single points of failure, reducing the risk of downtime or slashing due to infrastructure issues or security incidents.
+  Solo stakers managing their own validator nodes benefit  from increased resilience. By distributing key shares, they mitigate single points of failure, reducing the risk of downtime or slashing due to infrastructure issues or security incidents.
 
-## 2. Professional node operators
+* **2. Professional node operators**
 
-Professional and institutional node operators face unique operational risks that distributed key generation effectively mitigates:
+  Professional and institutional node operators face unique operational risks that distributed key generation effectively mitigates:
 
-* **Rogue employees:**
+  * **Rogue employees:**
 
-  * Employees with key access could maliciously or inadvertently compromise keys through theft, sale, or sabotage, causing financial losses or reputational harm.
-  * Disgruntled personnel could deliberately perform slashable actions or disrupt operations.
+    * Employees with key access could maliciously or inadvertently compromise keys through theft, sale, or sabotage, causing financial losses or reputational harm.
+    * Disgruntled personnel could deliberately perform slashable actions or disrupt operations.
 
-* **Malicious infrastructure providers:**
+  * **Malicious infrastructure providers:**
 
-  * Authorized external personnel, such as maintenance technicians, could exploit privileged access, creating risks comparable to insider threats.
+    * Authorized external personnel, such as maintenance technicians, could exploit privileged access, creating risks comparable to insider threats.
 
-## 3. Liquid staking protocols
+* **3. Liquid staking protocols**
 
-Liquid staking protocols would benefit from standardized DKG procedures implemented within the Ethereum client software. Such standardization enables them to integrate readily-available zero-knowledge proofs (ZKPs) for the verification of the DKG process, reducing complexity in their staker onboarding logic, and allowing protocol developers to concentrate on other critical aspects of their smart contract design.
+  Liquid staking protocols would benefit from standardized DKG procedures implemented within the Ethereum client software. Such standardization enables them to integrate readily-available zero-knowledge proofs (ZKPs) for the verification of the DKG process, reducing complexity in their staker onboarding logic, and allowing protocol developers to concentrate on other critical aspects of their smart contract design.
 
 This specification provides a clear, detailed, and interoperable standard for distributed BLS12-381 key generation, promoting security, operational continuity, and resilience. Additionally, it fosters client diversity and ensures compatibility across multiple Ethereum client implementations.
 
@@ -122,42 +114,46 @@ All keys and signatures mentioned here and below are BLS12-381 ones, conforming 
 
 Exactly $n$ entities MUST participate in the generation process, where $n$ is the total number of key shares to be generated. Every participant generates one unique share.
 
-The participants MUST be able to communicate over private, authenticated, point-to-point channels.
+The participants MUST communicate over private, authenticated, point-to-point channels.
 
 ### Security considerations
 
-- Every participant MUST be operated by different personnel. No personnel member should have access to more than one participant, limiting the impact of insider threats.
+- Every participant SHOULD be operated by different personnel. No personnel member should have access to more than one participant, limiting the impact of insider threats.
 - All accesses to key shares by personnel SHOULD be logged in a tamper-proof, auditable system that is immutable for any individual or supervisory entity involved with the distributed key. This prevents undetected key compromise or deletion.
 
 ### Coordination
 
-An entity - one of the participants or a separate component, potentially a smart contract - MUST act as the coordinator of the process.
+A dedicated entity—the **Coordinator**—MUST facilitate the DKG process. The coordinator can be one of the participants, a separate off-chain component, or a smart contract.
 
-The algorithms described in this document are designed to enable the coordinator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
+The design of this protocol accommodates two primary implementation models for the coordinator, catering to different trust assumptions:
+
+1.  **Trusted Coordinator (e.g., Client Module):** For high-trust environments, such as a solo staker distributing their key across their own machines or a professional operator managing a private cluster, the coordinator can be implemented as a module within the Ethereum client software. In this model, participants operate under a shared administrative context and trust the coordinator to be available and to execute the protocol without censorship or bias.
+
+2.  **Trust-Minimized Coordinator (e.g., Smart Contract):** For decentralized environments where participants may not trust each other (e.g., liquid staking protocols), the coordinator SHOULD be a smart contract on a censorship-resistant blockchain. This specification is explicitly designed to make this model highly efficient, as all required verification steps can be offloaded to zero-knowledge (ZK) circuits. A prototype implementation of such circuits is available at [https://github.com/metacraft-labs/dvt-circuits](https://github.com/metacraft-labs/dvt-circuits).
 
 #### Responsibilities
 
-- Initiating the protocol and setting key generation parameters
-- Selecting and coordinating the participants
-- Managing the steps of the protocol other than the secret shares exchange between participants
-- Determining the success or failure of the generation process, and identifying any misbehaving participants when possible
+The coordinator is responsible for:
 
-#### Trust model
+* Initiating the protocol and setting key generation parameters (e.g., `total_shares` and `threshold`).
+* Selecting and managing the set of participants for a generation ceremony.
+* Guiding the protocol through its steps, except for the direct peer-to-peer exchange of secret shares.
+* Determining the success or failure of the generation process and identifying misbehaving participants.
 
-The coordinator MUST follow either trusted or trustless model.
+#### Trust Model
 
-In the former case, the coordinator is assumed to be honest and available.
+The trust assumptions for the coordinator depend on its implementation.
 
-In the latter case, the coordinator is assumed to be a neutral arbiter, for example a smart contract. Implementation-defined mechanisms for verifying its honesty, and for dealing with possible lack of availability, MUST be provided.
+* A **trusted coordinator** is assumed to be honest and available.
+* A **trust-minimized coordinator** (e.g., a smart contract) is not trusted but is instead a neutral and verifiable arbiter. Its correct execution is enforced by the blockchain's consensus, and its logic is publicly auditable.
 
-In both models, the participants MUST be able to submit to the coordinator a cryptographic proof of misbehavior, for example a signed ZK proof. The coordinator MUST then perform one of the following actions:
+In the trust-minimized model, the protocol MUST include a robust dispute resolution mechanism. Participants MUST be able to submit a cryptographic proof of misbehavior (e.g., a signed ZK proof) to the coordinator. Upon receiving a valid proof, the coordinator MUST perform one of the following actions:
 
-- Challenge the suspected participant to provide the needed information in a verifiable way, for example by storing it in a blockchain. Preferably, this storing must involve some cost, to encourage participants to do what they can to avoid reaching this stage.
-  - If the information is determined again to be faulty, the coordinator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving participant.
-  - If the information is determined to be correct, the coordinator MUST store the information about the dispute and check previous dispute records for the involved participants.
-    - If a participant is frequently involved in dispute events with many different participants, the coordinator MUST either escalate (for example, to notify upper levels of software and / or responsible persons), or trigger a mechanism for punishing it.
-    - If a participant is frequently involved in dispute events with a small number of participants, the coordinator MUST escalate.
-- Directly trigger a mechanism for punishing the misbehaving participant, if it is determined reliably.
+* **Challenge the accused participant** to provide the correct information in a verifiable manner (e.g., by publishing it on-chain). To discourage disputes, this action SHOULD involve a cost for the challenged party.
+    * If the challenged participant fails to provide valid information, the coordinator MUST trigger a punishment mechanism (e.g., slashing their stake).
+    * If the information is proven correct, the coordinator MUST log the dispute event. It MAY monitor for patterns of malicious accusations:
+        * If a participant frequently initiates failing disputes with many different participants, the coordinator MAY escalate (e.g., by notifying supervisors) or trigger a punishment.
+* **Directly punish the misbehaving participant** if the provided proof is non-repudiable and sufficient to confirm the fault without a challenge.
 
 ## Generation sequence
 
