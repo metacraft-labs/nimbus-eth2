@@ -102,14 +102,17 @@ The design is inspired by the distributed key generation code and docs of [Dirk]
 
 # Specification
 
-The algorithm generates $n$ BLS12-381 shares of a distributed private key with threshold $t$, where $n > 1$, and $0 < t ≤ n$.
-
 The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
 
-The keyword "threshold" in this document defines the number of key shares sufficient to re-create the complete key,
-or to sign the same data so that the signatures can be aggregated into a signature verifiable with the complete public key.
-
 All keys and signatures mentioned here and below are BLS12-381 ones, conforming to [EIP-2333](https://eips.ethereum.org/EIPS/eip-2333).
+
+The algorithm generates $n$ BLS12-381 shares of a distributed private key with threshold $t$, where $n > 1$, and $0 < t ≤ n$.
+
+Following a successful generation:
+
+1) Any subset of at least $t$ participants can reconstruct the complete secret key or produce a threshold signature verifiable against the common threshold public key (also known as the "group public key").
+2) All subsets of participants of size $t$ or greater derive the same threshold public key and produce identical, valid threshold signatures on the same data.
+3) Any subset containing fewer than $t$ participants cannot obtain any Shannon information about the secret key.
 
 **Note on mathematical notation:** We use multiplicative notation for the elliptic curve group operations, where $g$ is the generator of $\mathbb{G}_1$ (the group containing BLS public keys in Ethereum's BLS12-381 implementation). All private keys and shares are scalars in $\mathbb{F}_r$, where $r$ is the BLS12-381 curve order.
 
@@ -201,7 +204,7 @@ Upon creating the local state, each candidate for participant MUST initialize th
 
 ### Generation of secret coefficients
 
-Once initialized, the local state MUST automatically generate secret coefficients by:
+During the initialization, the candidate MUST also use the following procedure to generate secret coefficients and store them in the local state:
 
 - Obtaining a sufficient amount of randomness from a cryptographically secure source
 - Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm).
@@ -210,10 +213,9 @@ _Note_: The `secret_coefficients` MUST NOT be derived from deterministic or low-
 
 ### Generation of secret shares
 
-Following generation of `secret_coefficients`, the local state MUST automatically:
+Following generation of `secret_coefficients`, each candidate MUST generate `total_shares` private keys, computed by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `secret_coefficients` private keys and a participant index iterating from 1 to `total_shares`.
 
-- Compute `total_shares` private keys, by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `secret_coefficients` private keys and a participant index iterating from 1 to `total_shares`.
-- Store the resulting private keys in an ordered list as `sent_shares`, indexed by the respective participant index of the recipient participant.
+The resulting private keys MUST be stored as an ordered list in `sent_shares`, indexed by the respective index of the recipient participant.
 
 ### Submission of polynomial commitments to coordinator
 
@@ -222,7 +224,7 @@ Each candidate for participant MUST submit, as an application for participation 
 - polynomial commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
 - a hash on array of data, mandatorily including the polynomial commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
 
-The applications for participation must be sortable through a standard deterministic algorithm - for example, by sorting hashes by value. The algorithm must be chosen so as to minimize the probability for sorting collisions, even as a result of collaboration between candidates to create one. 
+Applications MUST be deterministically sortable, for example, by lexicographically ordering their SHA-256 hashes. The sorting method MUST be selected to minimize the probability of collisions, even if candidates collaborate maliciously to produce them.
 
 ### Coordinator processing of polynomial commitments
 
