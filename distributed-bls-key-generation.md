@@ -22,14 +22,15 @@
     - [Assignment of participant indices](#assignment-of-participant-indices)
     - [Storing own polynomial commitments and secret shares](#storing-own-polynomial-commitments-and-secret-shares)
     - [Distribution of polynomial commitments](#distribution-of-polynomial-commitments)
+      - [Handling Broadcast Failures](#handling-broadcast-failures)
     - [Exchange of secret shares between participants](#exchange-of-secret-shares-between-participants)
       - [Security requirements for transmission](#security-requirements-for-transmission)
-      - [Share verification](#share-verification)
-      - [Timeout Handling](#timeout-handling)
-      - [On failure to receive a valid secret share](#on-failure-to-receive-a-valid-secret-share)
+      - [Verification of Secret Shares](#verification-of-secret-shares)
+      - [Liveness through Challenges](#liveness-through-challenges)
     - [Generating the distributed key share and threshold public key](#generating-the-distributed-key-share-and-threshold-public-key)
     - [Submission of data to coordinator](#submission-of-data-to-coordinator)
     - [Coordinator validation of results](#coordinator-validation-of-results)
+      - [Finalization and Handling Submission Failures](#finalization-and-handling-submission-failures)
       - [Partial public key validation](#partial-public-key-validation)
       - [Threshold public key validation](#threshold-public-key-validation)
       - [Signature validation](#signature-validation)
@@ -223,7 +224,7 @@ The applications for participation must be sortable through a standard determini
 
 ### Coordinator processing of polynomial commitments
 
-The coordinator MUST collect applications for participation from at least `total_shares` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
+The coordinator MUST open a registration window, defined by a clear deadline (e.g., a specific block height). If fewer than `total_shares` candidates submit a valid application before the window closes, the coordinator MUST declare the generation attempt unsuccessful, as the minimum number of participants has not been met.
 
 If more than `total_shares` candidates were initially notified and apply for participation, the coordinator MAY select among them exactly `total_shares` participants based on predefined selection criteria. These candidates become the participants in the key generation.
 
@@ -269,6 +270,10 @@ _Note_: Participant indices can be pre-assigned along with the generation parame
 
 Once participant indices have been assigned, the coordinator MUST send each participant the full list of polynomial commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their polynomial commitments in the list.
 
+#### Handling Broadcast Failures
+
+This broadcast from the coordinator MUST occur by a predefined deadline. If a participant who submitted a valid application does not receive the broadcast by this deadline, they SHOULD query the coordinator's state directly (e.g., by calling a view function on the smart contract) to determine the final participant set and their inclusion status. If the coordinator itself has failed to publish the list, the resolution depends on the trust model, potentially requiring administrative intervention or a separate protocol mechanism to remove a faulty coordinator.
+
 Participants that do not receive this confirmation within a predefined timeout MUST assume they were not selected and MUST destroy their local state.
 
 _Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The polynomial commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the coordinator records a commitment for their values.
@@ -289,13 +294,9 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
 - Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys for encryption MUST be authenticated via a trusted channel (e.g., on-chain registry or pre-established secure communication).
 
-#### Share verification
+#### Verification of Secret Shares
 
-After receiving a secret share, a participant MUST verify whether it is consistent with the polynomial commitments of the sender. This verification process ensures that the received secret share was correctly derived from the sender's polynomial.
-
-**Verification procedure:** Upon receiving share $s_{ij}$ from participant $i$, participant $j$ applies the [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) to the polynomial commitments of the sender and the recipient's participant index. The participant then checks that the public key corresponding to the received secret share matches the result of evaluating the sender's polynomial commitments at the recipient's index.
-
-The verification equation is:
+Upon receiving a secret share $s_{ij}$ from participant $i$, participant $j$ MUST immediately verify its correctness against the sender's public polynomial commitment. The verification succeeds if the following equation holds:
 
 $$g^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
 
@@ -307,15 +308,20 @@ where:
 - $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold
 - All exponentiation occurs in the group $\mathbb{G}_1$
 
-If the equation holds, it proves that the secret share is consistent with the polynomial commitments. If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation coordinator.
+If the equation does not hold, the share is invalid.
 
-#### Timeout Handling
+#### Liveness through Challenges
 
-If a participant fails to receive a valid secret share from another participant within the expected timeframe, the participant MUST notify the generation coordinator.
+To ensure the protocol makes progress, the exchange of secret shares MUST be completed within a predefined period. If this deadline passes, the protocol has stalled. Any compliant participant is then responsible for ensuring liveness by initiating a challenge.
 
-#### On failure to receive a valid secret share
+A participant $j$ MUST initiate a challenge against participant $i$ via the coordinator if either of these conditions is met:
+1.  Participant $j$ receives an **invalid** share from participant $i$.
+2.  Participant $j$ receives **no share** from participant $i$ by the deadline.
 
-If notified by a participant that a received secret share is not valid, or that one was not received within the expected timeframe, the coordinator MUST either take measures to either provide a valid secret share (e.g., via challenge mechanisms requiring the sender to provide verifiable proof, or through resharing protocols), or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
+The challenge compels the accused participant $i$ to broadcast the correct, valid secret share in a publicly verifiable way (e.g., by submitting it encrypted to the coordinator smart contract).
+
+* **If the accused participant provides the valid share in response to the challenge,** the protocol proceeds.
+* **If the accused participant fails to respond correctly to the challenge within a secondary deadline,** the coordinator MUST disqualify them, trigger a punishment (e.g., slashing), and abort the entire DKG ceremony.
 
 ### Generating the distributed key share and threshold public key
 
@@ -349,7 +355,14 @@ The generation coordinator MUST receive, from all participants and within a pred
 - A threshold public key
 - A signature over a predetermined message using the participant's key share (partial private key)
 
-If any of these are missing after the timeout, the coordinator MUST mark the key generation as unsuccessful and notify all participants. It MAY attempt to identify the source of failure and MAY recommend or enforce corrective measures.
+#### Finalization and Handling Submission Failures
+
+All participants MUST submit their results by a final submission deadline.
+
+If the deadline passes and the coordinator has not received valid results from all active participants, the process is stalled. Any compliant participant MAY then notify the coordinator to trigger a finalization step. The coordinator MUST then:
+1.  Identify all participants who failed to submit valid results.
+2.  Mark the non-compliant participants as faulty and trigger the appropriate punishment mechanism against them.
+3.  Declare the DKG ceremony unsuccessful, as a complete set of partial keys and signatures cannot be aggregated.
 
 Once these have been received, the coordinator MUST perform the following checks:
 
@@ -387,7 +400,7 @@ If one or more validations fail, the coordinator MUST declare the key generation
 
 Each participant concludes its involvement in the distributed key generation upon receiving a final status message from the coordinator indicating whether the process was successful or unsuccessful.
 
-If no such message is received within a predetermined timeout, the participant MUST treat the key generation as unsuccessful.
+If the coordinator's final status message (successful or unsuccessful) is not received by a predefined deadline, the participant SHOULD actively query the coordinator's state to get the final outcome. Relying on this direct check, the participant MUST either securely persist the generated key material or consider the generation unsuccessful and proceed with cleanup, as described below.
 
 #### On successful generation
 
