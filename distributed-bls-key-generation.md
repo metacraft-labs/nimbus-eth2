@@ -83,7 +83,7 @@ Existing Distributed Validator Technology (DVT) implementations often use propri
 
   * **Rogue employees:**
 
-    * Employees with key access could maliciously or inadvertently compromise keys through theft, sale, or sabotage, causing financial losses or reputational harm.
+    * Employees with key access could maliciously or inadvertently compromise keys through theft, sale or sabotage, causing financial losses and / or reputational harm.
     * Disgruntled personnel could deliberately perform slashable actions or disrupt operations.
 
   * **Malicious infrastructure providers:**
@@ -125,17 +125,17 @@ The participants MUST communicate over private, authenticated, point-to-point ch
 ### Security considerations
 
 - Every participant SHOULD be operated by different personnel. No personnel member should have access to more than one participant, limiting the impact of insider threats.
-- All accesses to key shares by personnel SHOULD be logged in a tamper-proof, auditable system that is immutable for any individual or supervisory entity involved with the distributed key. This prevents undetected key compromise or deletion.
+- All accesses to key shares by personnel SHOULD be logged in a tamper-proof, auditable system that is immutable for any individual or entity, including supervisory, involved with the distributed key. This prevents undetected key compromise or deletion.
 
 ### Coordination
 
-A dedicated entity—the **Coordinator**—MUST facilitate the DKG process. The coordinator can be one of the participants, a separate off-chain component, or a smart contract.
+A dedicated entity—the **Coordinator**—MUST facilitate the DKG process. The coordinator can be one of the participants, a separate off-chain component, a smart contract, or even a combination of these.
 
 The design of this protocol accommodates two primary implementation models for the coordinator, catering to different trust assumptions:
 
 1.  **Trusted Coordinator (e.g., Client Module):** For high-trust environments, such as a solo staker distributing their key across their own machines or a professional operator managing a private cluster, the coordinator can be implemented as a module within the Ethereum client software. In this model, participants operate under a shared administrative context and trust the coordinator to be available and to execute the protocol without censorship or bias.
 
-2.  **Trust-Minimized Coordinator (e.g., Smart Contract):** For decentralized environments where participants may not trust each other (e.g., liquid staking protocols), the coordinator SHOULD be a smart contract on a censorship-resistant blockchain. This specification is explicitly designed to make this model highly efficient, as all required verification steps can be offloaded to zero-knowledge (ZK) circuits. A prototype implementation of such circuits is available at [https://github.com/metacraft-labs/dvt-circuits](https://github.com/metacraft-labs/dvt-circuits).
+2.  **Trust-Minimized Coordinator (e.g., Smart Contract):** For decentralized environments where participants may not trust each other (e.g., liquid staking protocols), the coordinator SHOULD be a smart contract on a censorship-resistant blockchain, or another publicly verifiable module. This specification is explicitly designed to make this model highly efficient, as all required verification steps can be offloaded to zero-knowledge (ZK) circuits. A prototype implementation of such circuits is available at [https://github.com/metacraft-labs/dvt-circuits](https://github.com/metacraft-labs/dvt-circuits).
 
 #### Responsibilities
 
@@ -159,7 +159,7 @@ In the trust-minimized model, the protocol MUST include a robust dispute resolut
     * If the challenged participant fails to provide valid information, the coordinator MUST trigger a punishment mechanism (e.g., slashing their stake).
     * If the information is proven correct, the coordinator MUST log the dispute event. It MAY monitor for patterns of malicious accusations:
         * If a participant frequently initiates failing disputes with many different participants, the coordinator MAY escalate (e.g., by notifying supervisors) or trigger a punishment.
-* **Directly punish the misbehaving participant** if the provided proof is non-repudiable and sufficient to confirm the fault without a challenge.
+* **Directly trigger a punishment of the misbehaving participant** if the provided proof is non-repudiable and sufficient to confirm the fault without a challenge.
 
 ## Generation sequence
 
@@ -170,7 +170,7 @@ Consists of the following steps:
 The coordinator initiates the process by notifying a set of entities capable of acting as participants in distributed key generation.
 
 - If participation is mandatory, the coordinator will notify exactly $n$ entities.
-- If participation is optional, the coordinator will typically notify more than $n$ entities, and will select $n$ participants from the candidates who apply. If less than $n$ candidates apply or are selected, the coordinator might either notify more entities, or declare the generation as unsuccessful.
+- If participation is optional, the coordinator will typically notify more than $n$ entities, and will select $n$ participants from the candidates who apply. If less than $n$ candidates apply or are selectable, the coordinator might either notify more entities, or declare the generation as unsuccessful.
 
 The initial notification MUST include the following initialization parameters:
 
@@ -179,7 +179,7 @@ The initial notification MUST include the following initialization parameters:
 
 ### Creation of local state
 
-Each candidate participant MUST initialize local state responsible for managing the protocol throughout the key generation process.
+Each candidate for participant MUST initialize a local state responsible for managing the protocol throughout the key generation process.
 
 This state MUST maintain the following internal variables:
 
@@ -215,30 +215,30 @@ _Note_: The `secret_coefficients` MUST NOT be derived from deterministic or low-
 
 Following generation of `secret_coefficients`, each candidate MUST generate `total_shares` private keys, computed by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `secret_coefficients` private keys and a participant index iterating from 1 to `total_shares`.
 
-The resulting private keys MUST be stored as an ordered list in `sent_shares`, indexed by the respective index of the recipient participant.
+The resulting private keys MUST be stored in `sent_shares` as an ordered list, indexed by the respective index of the recipient participant.
 
 ### Submission of coefficient commitments to coordinator
 
 Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `secret_coefficients` to the coordinator. This commitment might be:
 
 - coefficient commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
-- a hash on array of data, mandatorily including the coefficient commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
+- a hash on array of data, mandatorily including the coefficient commitments, and possibly other public data (examples: the `total_shares` and / or `threshold`, the public key of the candidate for participant, etc)
 
-Applications MUST be deterministically sortable, for example, by lexicographically ordering their SHA-256 hashes. The sorting method MUST be selected to minimize the probability of collisions, even if candidates collaborate maliciously to produce them.
+Applications MUST be deterministically sortable, for example, by lexicographically ordering their SHA-256 hashes. The hashing and sorting methods MUST be selected to minimize the probability of collisions, even if candidates collaborate maliciously to produce them.
 
 ### Coordinator processing of coefficient commitments
 
-The coordinator MUST open a registration window, defined by a clear deadline (e.g., a specific block height). If fewer than `total_shares` candidates submit a valid application before the window closes, the coordinator MUST declare the generation attempt unsuccessful, as the minimum number of participants has not been met.
+The coordinator MUST open a registration window, defined by a clear deadline (e.g., a specific block height). If fewer than `total_shares` candidates submit a valid application before the window closes, the coordinator MUST either re-set the deadline (where feasible), or declare the generation attempt unsuccessful, as the minimum number of participants has not been met.
 
-If more than `total_shares` candidates were initially notified and apply for participation, the coordinator MAY select among them exactly `total_shares` participants based on predefined selection criteria. These candidates become the participants in the key generation.
+If more than `total_shares` candidates were initially notified and apply for participation, the coordinator MUST select among them exactly `total_shares` participants based on predefined selection criteria. These candidates become the participants in the key generation.
 
 #### Commitment verification
 
 The collected applications must be checked at the end of the application period for sorting collisions. Should two or more application cause a sorting collision (for example, have the same hash), the candidates that produced them MUST NOT be accepted as generation participants.
 
-If that leaves fewer candidates for participants than the wanted count of key shares, the coordinator MUST terminate the generation procedure. It also MAY terminate it even if there are enough candidates, just because a sorting collision is found.
+If that leaves fewer candidates for participants than the wanted count of key shares, the coordinator MUST treat that as a lack of enough candidates.
 
-The coordinator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation.
+The coordinator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation, if a malicious intent is proven.
 
 ### Assignment of participant indices
 
@@ -256,7 +256,25 @@ One such algorithm might be:
 - Sort participants by the numerical value of their hash (interpreted as big-endian integers), smallest-first.
 - Assign participant indices based on the sorted order: the first participant receives index 1, the second receives 2, ..., up to `total_shares`.
 
-The coordinator then MUST communicate the assigned participant index to each participant.
+The coordinator then MUST communicate the assigned participant index to each participant. This doubles as a confirmation that the candidate who receives this is selected for a participant.
+
+### Distribution of coefficient commitments
+
+If the candidate commitments include the complete coefficient commitments of the candidate, the coordinator has their full list. In this case, it MUST send to every selected participant this list, possibly in one message with the unique participant index.
+
+Either the unique participant index can be omitted from the message, of the participant's own coefficient commitments can be omitted from the list sent to it, but not both.
+
+The participant will deduce the index of every other participant by the position of their coefficient commitments in the list.
+
+If the message does not contain the unique participant index explicitly, the participant MUST deduce it from the position of its own coefficient commitments in the list.
+
+If the candidate commitments include only a hash of the candidate coefficient commitments, the coordinator must send to every selected participant these hashes instead of a full list of coefficient commitments.
+
+#### Handling Broadcast Failures
+
+This broadcast from the coordinator MUST occur by a predefined deadline. If a participant who submitted a valid application does not receive the broadcast by this deadline, they SHOULD query the coordinator's state directly (e.g., by calling a view function on the smart contract) to determine the final participant set and their inclusion status. If the coordinator itself has failed to publish the list, the resolution depends on the trust model, potentially requiring administrative intervention or a separate protocol mechanism to remove a faulty coordinator.
+
+Participants that do not receive this confirmation within a predefined timeout MUST assume they were not selected and MUST destroy their local state.
 
 ### Storing own coefficient commitments and secret shares
 
@@ -270,24 +288,14 @@ _Note_: Participant indices can be pre-assigned along with the generation parame
 - Trust assumption increase: Participants must fully trust the coordinator to assign indices honestly.
 - ZKP compatibility: Pre-assigned indices not derived deterministically from in-protocol values may complicate or prevent the construction of zero-knowledge proofs of correctness.
 
-### Distribution of coefficient commitments
-
-Once participant indices have been assigned, the coordinator MUST send each participant the full list of coefficient commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their coefficient commitments in the list.
-
-#### Handling Broadcast Failures
-
-This broadcast from the coordinator MUST occur by a predefined deadline. If a participant who submitted a valid application does not receive the broadcast by this deadline, they SHOULD query the coordinator's state directly (e.g., by calling a view function on the smart contract) to determine the final participant set and their inclusion status. If the coordinator itself has failed to publish the list, the resolution depends on the trust model, potentially requiring administrative intervention or a separate protocol mechanism to remove a faulty coordinator.
-
-Participants that do not receive this confirmation within a predefined timeout MUST assume they were not selected and MUST destroy their local state.
-
-_Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The coefficient commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the coordinator records a commitment for their values.
-
 ### Exchange of secret shares between participants
 
-Each participant MUST securely transmit their secret shares intended for other participants, directly to their respective recipients. Specifically:
+Each participant MUST securely transmit their `sent_shares` directly to their respective recipients. Specifically:
 
 - Participant $A$ MUST send its $n$-th secret share $s_{An}$ to Participant $B$, where $n$ is Participant $B$'s participant index.
 - Upon receipt, Participant $B$ MUST store this secret as the $m$-th entry in its `received_shares`, where $m$ is Participant $A$'s participant index.
+
+If the participants haven't received a full list of coefficient commitment vectors from the coordinator, they MUST send together with their `sent_shares` also their coefficient commitment vectors.
 
 _Note_: Sending and receiving of secret shares SHOULD NOT be assumed to occur over a single bi-directional connection, as that depends on deployment constraints.
 
@@ -298,9 +306,17 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
 - Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys for encryption MUST be authenticated via a trusted channel (e.g., on-chain registry or pre-established secure communication).
 
+#### Verification of Coefficient Commitments
+
+If the coordinator has received from participants only hashes of their coefficient commitments, and has sent back to them a list of hashes, a particimant MUST receive from the other ones not only `received_shares`, but also their coefficient commitment vectors. The lack of a coefficient commitment vector in this case makes the received share data invalid.
+
+If the participant has received a list of coefficient commitments hashes, and a coefficient commitment vector is received from another participant, the receiving participant MUST hash it according to the established hashing algorithm, and to compare it with the list hash for the sending participant. If they do not match, the received share data is considered invalid.
+
+If the verification is successful, the received coefficient commitments vector must be stored in the `coefficient_commitments` list, at a position specified by the sending participant's unique index.
+
 #### Verification of Secret Shares
 
-Upon receiving a secret share $s_{ij}$ from participant $i$, participant $j$ MUST immediately verify its correctness against the sender's public coefficient commitments. The verification succeeds if the following equation holds:
+Upon receiving a secret share $s_{ij}$ from participant $i$, participant $j$ MUST verify its correctness against the sender's public coefficient commitments. The verification succeeds if the following equation holds:
 
 $$g^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
 
@@ -316,11 +332,13 @@ If the equation does not hold, the share is invalid.
 
 #### Liveness through Challenges
 
-To ensure the protocol makes progress, the exchange of secret shares MUST be completed within a predefined period. If this deadline passes, the protocol has stalled. Any compliant participant is then responsible for ensuring liveness by initiating a challenge.
+To ensure the protocol makes progress, the exchange of `received_shares` MUST be completed within a predefined period. If this deadline passes, the protocol has stalled. Any compliant participant is then responsible for ensuring liveness by initiating a challenge.
 
 A participant $j$ MUST initiate a challenge against participant $i$ via the coordinator if either of these conditions is met:
 1.  Participant $j$ receives an **invalid** share from participant $i$.
 2.  Participant $j$ receives **no share** from participant $i$ by the deadline.
+
+In case 1, Participant $j$ MUST initiate the challenge immediately, not waiting for the predefined period to end.
 
 The challenge compels the accused participant $i$ to broadcast the correct, valid secret share in a publicly verifiable way (e.g., by submitting it encrypted to the coordinator smart contract).
 
@@ -329,7 +347,7 @@ The challenge compels the accused participant $i$ to broadcast the correct, vali
 
 ### Generating the distributed key share and threshold public key
 
-Each participant MUST perform the following:
+After receiving all expected `received_shares` and establishing that they are correct, each participant MUST automatically perform the following:
 
 - Compute the secret share (key share) by producing a sum of the `received_shares`, modulo the BLS12-381 curve order $r$: $s_i = \sum_{j=1}^n s_{ji} \mod r$. Store the result in the `key_share` field of the local state.
 - Derive the partial public key from the computed key share.
@@ -338,8 +356,6 @@ Each participant MUST perform the following:
   - Order these public keys according to the participants' indices.
   - Aggregate them into a single public key using the BLS12-381 public key aggregation method.
   - Store the result as the $M$-th entry in the `aggregated_commitments` array.
-
-_Note_: This step MUST be automatically performed after receiving the final secret share.
 
 _Note_: In most use cases, only the first entry in `aggregated_commitments` (i.e., index 0) is used. It corresponds to the threshold public key associated with the final distributed private key. If other indices are not required for the application, their computation may be omitted to reduce overhead.
 
@@ -363,12 +379,14 @@ The generation coordinator MUST receive, from all participants and within a pred
 
 All participants MUST submit their results by a final submission deadline.
 
-If the deadline passes and the coordinator has not received valid results from all active participants, the process is stalled. Any compliant participant MAY then notify the coordinator to trigger a finalization step. The coordinator MUST then:
-1.  Identify all participants who failed to submit valid results.
-2.  Mark the non-compliant participants as faulty and trigger the appropriate punishment mechanism against them.
-3.  Declare the DKG ceremony unsuccessful, as a complete set of partial keys and signatures cannot be aggregated.
+If the deadline passes and the coordinator has not received valid results from all active participants, the process is stalled. The coordinator MUST then trigger a challenge to all participants that haven't submitted valid results.
 
-Once these have been received, the coordinator MUST perform the following checks:
+The challenge compels every accused participant to broadcast the correct, valid data in a publicly verifiable way (e.g., by submitting it to the coordinator smart contract).
+
+* **If an accused participant provides the valid data in response to the challenge,** the protocol proceeds.
+* **If an accused participant fails to respond correctly to the challenge within a secondary deadline,** the coordinator MUST disqualify them, trigger a punishment (e.g., slashing), and abort the entire DKG ceremony.
+
+Once valid results have been received from all participants, the coordinator MUST perform the following checks:
 
 #### Partial public key validation
 
@@ -388,17 +406,17 @@ After collecting all participant signatures, the coordinator MUST verify:
 - That each individual signature is valid with respect to the corresponding partial public key.
 - That the aggregate of all signatures is valid with respect to the threshold public key.
 
-If any verification fails, the coordinator MUST mark the process as unsuccessful and notify participants. As before, it MAY attempt to attribute fault and take or propose appropriate action.
+If any verification fails, the coordinator MUST mark the entire DKG ceremony as unsuccessful and notify participants. It also MAY attempt to attribute fault and triger punishment.
 
 #### Successful completion
 
-If all validations pass, the coordinator MUST mark the key generation as successful and inform all participants accordingly.
+If all validations pass, the coordinator MUST mark the key generation as successful and the DKG ceremony as finished, and inform all participants accordingly.
 
 _Note_: The verified partial and threshold public keys, as well as the aggregated signature, MAY serve additional purposes. For example, the aggregated signature can fulfill Ethereum's validator requirement for a signed deposit message.
 
 #### Unsuccessful completion
 
-If one or more validations fail, the coordinator MUST declare the key generation as unsuccessful and inform all participants accordingly.
+If one or more validations fail, the coordinator MUST declare the key generation as unsuccessful, abort the DKG ceremony and inform all participants accordingly.
 
 ### Participant completion of key generation
 
