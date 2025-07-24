@@ -69,13 +69,15 @@ Distributed key generation enhances security by ensuring that no single particip
 
 # Motivation
 
-The primary motivation behind creating a standard specification for Distributed Key Generation (DKG) for Ethereum is to enhance resilience, security, interoperability, and fault tolerance across various staking setups. Existing distributed validator technology (DVT) implementations often focus on specific use cases, typically within liquid staking protocols. This open specification generalizes the benefits of distributed key management, benefiting a broader audience including:
+The primary motivation is to create a clear, interoperable standard for **distributed BLS12-381 key generation**, intended to become native functionality integrated directly into Ethereum's consensus clients. While this specification is general-purpose and valuable for any system requiring threshold BLS signatures, its immediate and most pressing application is to enhance the resilience, security, and fault tolerance of **Ethereum staking**.
 
-* **1. Solo stakers**
+Existing Distributed Validator Technology (DVT) implementations often use proprietary DKG methods tailored to specific use cases, typically within liquid staking protocols. This open specification generalizes the benefits of distributed key management for a broader audience, including:
 
-  Solo stakers managing their own validator nodes benefit  from increased resilience. By distributing key shares, they mitigate single points of failure, reducing the risk of downtime or slashing due to infrastructure issues or security incidents.
+* **Solo stakers**
 
-* **2. Professional node operators**
+  Solo stakers managing their own validator nodes benefit from increased resilience. By distributing key shares, they mitigate single points of failure, reducing the risk of downtime or slashing due to infrastructure issues or security incidents.
+
+* **Professional node operators**
 
   Professional and institutional node operators face unique operational risks that distributed key generation effectively mitigates:
 
@@ -88,11 +90,11 @@ The primary motivation behind creating a standard specification for Distributed 
 
     * Authorized external personnel, such as maintenance technicians, could exploit privileged access, creating risks comparable to insider threats.
 
-* **3. Liquid staking protocols**
+* **Liquid staking protocols**
 
-  Liquid staking protocols would benefit from standardized DKG procedures implemented within the Ethereum client software. Such standardization enables them to integrate readily-available zero-knowledge proofs (ZKPs) for the verification of the DKG process, reducing complexity in their staker onboarding logic, and allowing protocol developers to concentrate on other critical aspects of their smart contract design.
+  Liquid staking protocols would benefit from standardized DKG procedures implemented within the Ethereum client software. Such standardization enables them to integrate readily-available zero-knowledge proofs (ZKPs) for the verification of the DKG process, reducing complexity in their staker onboarding logic, and allowing them to focus on other more differentiating aspects of their protocol design.
 
-This specification provides a clear, detailed, and interoperable standard for distributed BLS12-381 key generation, promoting security, operational continuity, and resilience. Additionally, it fosters client diversity and ensures compatibility across multiple Ethereum client implementations.
+Ultimately, this specification provides a foundational building block for any application requiring secure, distributed key generation for BLS12-381. By addressing the critical needs of the Ethereum ecosystem, it promotes interoperability and client diversity while simultaneously serving as a public good for the wider technology landscape.
 
 # Acknowledgements
 
