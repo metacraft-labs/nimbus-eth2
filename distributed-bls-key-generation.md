@@ -11,29 +11,29 @@
 - [Specification](#specification)
   - [Participating entities](#participating-entities)
     - [Security considerations](#security-considerations)
-    - [Orchestration](#orchestration)
+    - [Coordination](#coordination)
       - [Responsibilities](#responsibilities)
       - [Trust model](#trust-model)
   - [Generation sequence](#generation-sequence)
-    - [Initiation by the orchestrator](#initiation-by-the-orchestrator)
+    - [Initiation by the coordinator](#initiation-by-the-coordinator)
     - [Creation of local state](#creation-of-local-state)
     - [Initial setup](#initial-setup)
     - [Generation of secret coefficients](#generation-of-secret-coefficients)
     - [Generation of secret shares](#generation-of-secret-shares)
-    - [Submission of polynomial commitments to orchestrator](#submission-of-polynomial-commitments-to-orchestrator)
-    - [Orchestrator processing of polynomial commitments](#orchestrator-processing-of-polynomial-commitments)
-      - [Verification](#verification)
+    - [Submission of polynomial commitments to coordinator](#submission-of-polynomial-commitments-to-coordinator)
+    - [Coordinator processing of polynomial commitments](#coordinator-processing-of-polynomial-commitments)
+      - [Commitment verification](#commitment-verification)
     - [Assignment of participant indices](#assignment-of-participant-indices)
     - [Storing own polynomial commitments and secret shares](#storing-own-polynomial-commitments-and-secret-shares)
     - [Distribution of polynomial commitments](#distribution-of-polynomial-commitments)
     - [Exchange of secret shares between participants](#exchange-of-secret-shares-between-participants)
       - [Security requirements for transmission](#security-requirements-for-transmission)
-      - [Verification](#verification-1)
+      - [Share verification](#share-verification)
       - [Timeout Handling](#timeout-handling)
       - [On failure to receive a valid secret share](#on-failure-to-receive-a-valid-secret-share)
     - [Generating the distributed key share and threshold public key](#generating-the-distributed-key-share-and-threshold-public-key)
-    - [Submission of data to orchestrator](#submission-of-data-to-orchestrator)
-    - [Orchestrator validation of results](#orchestrator-validation-of-results)
+    - [Submission of data to coordinator](#submission-of-data-to-coordinator)
+    - [Coordinator validation of results](#coordinator-validation-of-results)
       - [Partial public key validation](#partial-public-key-validation)
       - [Threshold public key validation](#threshold-public-key-validation)
       - [Signature validation](#signature-validation)
@@ -47,7 +47,7 @@
     - [Polynomial evaluation algorithm](#polynomial-evaluation-algorithm)
   - [Exchanged data](#exchanged-data)
     - [Generation notification](#generation-notification)
-    - [Secret coefficients public keys](#secret-coefficients-public-keys)
+    - [Polynomial commitment](#polynomial-commitment)
     - [Participation invitation](#participation-invitation)
     - [Participant index assignment](#participant-index-assignment)
     - [Exchanged secret share](#exchanged-secret-share)
@@ -129,11 +129,11 @@ The participants MUST be able to communicate over private, authenticated, point-
 - Every participant MUST be operated by different personnel. No personnel member should have access to more than one participant, limiting the impact of insider threats.
 - All accesses to key shares by personnel SHOULD be logged in a tamper-proof, auditable system that is immutable for any individual or supervisory entity involved with the distributed key. This prevents undetected key compromise or deletion.
 
-### Orchestration
+### Coordination
 
-An entity - one of the participants or a separate component, potentially a smart contract - MUST act as the orchestrator of the process.
+An entity - one of the participants or a separate component, potentially a smart contract - MUST act as the coordinator of the process.
 
-The algorithms described in this document are designed to enable the orchestrator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
+The algorithms described in this document are designed to enable the coordinator role to be efficiently fulfilled by blockchain smart contracts that offload most verification procedures to zero-knowledge circuits. A prototype implementation of such circuits is available at https://github.com/metacraft-labs/dvt-circuits.
 
 #### Responsibilities
 
@@ -144,31 +144,31 @@ The algorithms described in this document are designed to enable the orchestrato
 
 #### Trust model
 
-The orchestrator MUST follow either trusted or trustless model.
+The coordinator MUST follow either trusted or trustless model.
 
-In the former case, the orchestrator is assumed to be honest and available.
+In the former case, the coordinator is assumed to be honest and available.
 
-In the latter case, the orchestrator is assumed to be a neutral arbiter, for example a smart contract. Implementation-defined mechanisms for verifying its honesty, and for dealing with possible lack of availability, MUST be provided.
+In the latter case, the coordinator is assumed to be a neutral arbiter, for example a smart contract. Implementation-defined mechanisms for verifying its honesty, and for dealing with possible lack of availability, MUST be provided.
 
-In both models, the participants MUST be able to submit to the orchestrator a cryptographic proof of misbehavior, for example a signed ZK proof. The orchestrator MUST then perform one of the following actions:
+In both models, the participants MUST be able to submit to the coordinator a cryptographic proof of misbehavior, for example a signed ZK proof. The coordinator MUST then perform one of the following actions:
 
 - Challenge the suspected participant to provide the needed information in a verifiable way, for example by storing it in a blockchain. Preferably, this storing must involve some cost, to encourage participants to do what they can to avoid reaching this stage.
-  - If the information is determined again to be faulty, the orchestrator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving participant.
-  - If the information is determined to be correct, the orchestrator MUST store the information about the dispute and check previous dispute records for the involved participants.
-    - If a participant is frequently involved in dispute events with many different participants, the orchestrator MUST either escalate (for example, to notify upper levels of software and / or responsible persons), or trigger a mechanism for punishing it.
-    - If a participant is frequently involved in dispute events with a small number of participants, the orchestrator MUST escalate.
+  - If the information is determined again to be faulty, the coordinator MUST trigger a mechanism for punishing - eg. slashing - the misbehaving participant.
+  - If the information is determined to be correct, the coordinator MUST store the information about the dispute and check previous dispute records for the involved participants.
+    - If a participant is frequently involved in dispute events with many different participants, the coordinator MUST either escalate (for example, to notify upper levels of software and / or responsible persons), or trigger a mechanism for punishing it.
+    - If a participant is frequently involved in dispute events with a small number of participants, the coordinator MUST escalate.
 - Directly trigger a mechanism for punishing the misbehaving participant, if it is determined reliably.
 
 ## Generation sequence
 
 Consists of the following steps:
 
-### Initiation by the orchestrator
+### Initiation by the coordinator
 
-The orchestrator initiates the process by notifying a set of entities capable of acting as participants in distributed key generation.
+The coordinator initiates the process by notifying a set of entities capable of acting as participants in distributed key generation.
 
-- If participation is mandatory, the orchestrator will notify exactly $n$ entities.
-- If participation is optional, the orchestrator will typically notify more than $n$ entities, and will select $n$ participants from the candidates who apply. If less than $n$ candidates apply or are selected, the orchestrator might either notify more entities, or declare the generation as unsuccessful.
+- If participation is mandatory, the coordinator will notify exactly $n$ entities.
+- If participation is optional, the coordinator will typically notify more than $n$ entities, and will select $n$ participants from the candidates who apply. If less than $n$ candidates apply or are selected, the coordinator might either notify more entities, or declare the generation as unsuccessful.
 
 The initial notification MUST include the following initialization parameters:
 
@@ -216,32 +216,32 @@ Following generation of `secret_coefficients`, the local state MUST automaticall
 - Compute `total_shares` private keys, by evaluating this [polynomial evaluation algorithm](#polynomial-evaluation-algorithm) on the `secret_coefficients` private keys and a participant index iterating from 1 to `total_shares`.
 - Store the resulting private keys in an ordered list as `sent_shares`, indexed by the respective participant index of the recipient participant.
 
-### Submission of polynomial commitments to orchestrator
+### Submission of polynomial commitments to coordinator
 
-Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `secret_coefficients` to the orchestrator. This commitment might be:
+Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `secret_coefficients` to the coordinator. This commitment might be:
 
 - polynomial commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
 - a hash on array of data, mandatorily including the polynomial commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
 
 The applications for participation must be sortable through a standard deterministic algorithm - for example, by sorting hashes by value. The algorithm must be chosen so as to minimize the probability for sorting collisions, even as a result of collaboration between candidates to create one. 
 
-### Orchestrator processing of polynomial commitments
+### Coordinator processing of polynomial commitments
 
-The orchestrator MUST collect applications for participation from at least `total_shares` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
+The coordinator MUST collect applications for participation from at least `total_shares` candidates within a predefined timeout period. Failure to achieve this MUST result in the generation process being aborted.
 
-If more than `total_shares` candidates were initially notified and apply for participation, the orchestrator MAY select among them exactly `total_shares` participants based on predefined selection criteria. These candidates become the participants in the key generation.
+If more than `total_shares` candidates were initially notified and apply for participation, the coordinator MAY select among them exactly `total_shares` participants based on predefined selection criteria. These candidates become the participants in the key generation.
 
-#### Verification
+#### Commitment verification
 
 The collected applications must be checked at the end of the application period for sorting collisions. Should two or more application cause a sorting collision (for example, have the same hash), the candidates that produced them MUST NOT be accepted as generation participants.
 
-If that leaves fewer candidates for participants than the wanted count of key shares, the orchestrator MUST terminate the generation procedure. It also MAY terminate it even if there are enough candidates, just because a sorting collision is found.
+If that leaves fewer candidates for participants than the wanted count of key shares, the coordinator MUST terminate the generation procedure. It also MAY terminate it even if there are enough candidates, just because a sorting collision is found.
 
-The orchestrator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation.
+The coordinator also MUST trigger a procedure for punishing - eg. slashing - the candidates involved in the collision, either if they have already misbehaved in the same or other way, or even at a first violation.
 
 ### Assignment of participant indices
 
-Once the final set of participants is selected, the orchestrator deterministically assigns each one a unique participant index in the range 
+Once the final set of participants is selected, the coordinator deterministically assigns each one a unique participant index in the range 
 1 to `total_shares`, using a standardized deterministic algorithm:
 
 One such algorithm might be:
@@ -255,7 +255,7 @@ One such algorithm might be:
 - Sort participants by the numerical value of their hash (interpreted as big-endian integers), smallest-first.
 - Assign participant indices based on the sorted order: the first participant receives index 1, the second receives 2, ..., up to `total_shares`.
 
-The orchestrator then MUST communicate the assigned participant index to each participant.
+The coordinator then MUST communicate the assigned participant index to each participant.
 
 ### Storing own polynomial commitments and secret shares
 
@@ -265,17 +265,17 @@ After receiving their participant index, each participant MUST:
 - Store the corresponding sent secret share (generated by themselves for this participant index) as the `participant_index`-th entry in the `received_shares` list.
 
 _Note_: Participant indices can be pre-assigned along with the generation parameters. This allows early generation of `sent_shares` and simplifies the protocol. However, this approach eliminates the ability to select from a candidate pool and introduces several risks:
-- Key bias attacks: A malicious orchestrator could manipulate participant ordering to bias the resulting key material.
-- Trust assumption increase: Participants must fully trust the orchestrator to assign indices honestly.
+- Key bias attacks: A malicious coordinator could manipulate participant ordering to bias the resulting key material.
+- Trust assumption increase: Participants must fully trust the coordinator to assign indices honestly.
 - ZKP compatibility: Pre-assigned indices not derived deterministically from in-protocol values may complicate or prevent the construction of zero-knowledge proofs of correctness.
 
 ### Distribution of polynomial commitments
 
-Once participant indices have been assigned, the orchestrator MUST send each participant the full list of polynomial commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their polynomial commitments in the list.
+Once participant indices have been assigned, the coordinator MUST send each participant the full list of polynomial commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their polynomial commitments in the list.
 
 Participants that do not receive this confirmation within a predefined timeout MUST assume they were not selected and MUST destroy their local state.
 
-_Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The polynomial commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the orchestrator records a commitment for their values.
+_Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The polynomial commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the coordinator records a commitment for their values.
 
 ### Exchange of secret shares between participants
 
@@ -293,7 +293,7 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 - End-to-end encrypted network connections (e.g., TLS with mutual authentication)
 - Encrypted message publishing on a public or semi-public medium (e.g., blockchain or distributed storage), using the receiver's pre-shared public key. Participant public keys for encryption MUST be authenticated via a trusted channel (e.g., on-chain registry or pre-established secure communication).
 
-#### Verification
+#### Share verification
 
 After receiving a secret share, a participant MUST verify whether it is consistent with the polynomial commitments of the sender. This verification process ensures that the received secret share was correctly derived from the sender's polynomial.
 
@@ -311,15 +311,15 @@ where:
 - $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold
 - All exponentiation occurs in the group $\mathbb{G}_1$
 
-If the equation holds, it proves that the secret share is consistent with the polynomial commitments. If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation orchestrator.
+If the equation holds, it proves that the secret share is consistent with the polynomial commitments. If they do not match, the received secret share is considered not valid, and the participant MUST notify the generation coordinator.
 
 #### Timeout Handling
 
-If a participant fails to receive a valid secret share from another participant within the expected timeframe, the participant MUST notify the generation orchestrator.
+If a participant fails to receive a valid secret share from another participant within the expected timeframe, the participant MUST notify the generation coordinator.
 
 #### On failure to receive a valid secret share
 
-If notified by a participant that a received secret share is not valid, or that one was not received within the expected timeframe, the orchestrator MUST either take measures to either provide a valid secret share (e.g., via challenge mechanisms requiring the sender to provide verifiable proof, or through resharing protocols), or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
+If notified by a participant that a received secret share is not valid, or that one was not received within the expected timeframe, the coordinator MUST either take measures to either provide a valid secret share (e.g., via challenge mechanisms requiring the sender to provide verifiable proof, or through resharing protocols), or to declare the generation invalid. In both cases, it MAY try to determine the faulty participant and to construct a proof for its fault.
 
 ### Generating the distributed key share and threshold public key
 
@@ -337,25 +337,25 @@ _Note_: This step MUST be automatically performed after receiving the final secr
 
 _Note_: In most use cases, only the first entry in `aggregated_commitments` (i.e., index 0) is used. It corresponds to the threshold public key associated with the final distributed private key. If other indices are not required for the application, their computation may be omitted to reduce overhead.
 
-### Submission of data to orchestrator
+### Submission of data to coordinator
 
-Each participant MUST send to the orchestrator:
+Each participant MUST send to the coordinator:
 
 - The derived partial public key (corresponding to their computed private key share).
 - The threshold public key at index 0 (i.e., the combined public key for the distributed private key).
 - A signature over a predetermined message, using the computed private key share. This serves as proof of key share possession and correctness.
 
-### Orchestrator validation of results
+### Coordinator validation of results
 
-The generation orchestrator MUST receive, from all participants and within a predefined timeout:
+The generation coordinator MUST receive, from all participants and within a predefined timeout:
 
 - A partial public key
 - A threshold public key
 - A signature over a predetermined message using the participant's key share (partial private key)
 
-If any of these are missing after the timeout, the orchestrator MUST mark the key generation as unsuccessful and notify all participants. It MAY attempt to identify the source of failure and MAY recommend or enforce corrective measures.
+If any of these are missing after the timeout, the coordinator MUST mark the key generation as unsuccessful and notify all participants. It MAY attempt to identify the source of failure and MAY recommend or enforce corrective measures.
 
-Once these have been received, the orchestrator MUST perform the following checks:
+Once these have been received, the coordinator MUST perform the following checks:
 
 #### Partial public key validation
 
@@ -366,30 +366,30 @@ Once these have been received, the orchestrator MUST perform the following check
 - Threshold public key consistency: Verify that all participants submitted the same threshold public key.
 - Threshold public key correctness: Confirm that the aggregation of all partial public keys matches the submitted threshold public key.
 
-If any of these checks fails, the orchestrator MUST declare the generation unsuccessful and inform participants. It MAY identify the misbehaving party and MAY take or suggest remedial action.
+If any of these checks fails, the coordinator MUST declare the generation unsuccessful and inform participants. It MAY identify the misbehaving party and MAY take or suggest remedial action.
 
 #### Signature validation
 
-After collecting all participant signatures, the orchestrator MUST verify:
+After collecting all participant signatures, the coordinator MUST verify:
 
 - That each individual signature is valid with respect to the corresponding partial public key.
 - That the aggregate of all signatures is valid with respect to the threshold public key.
 
-If any verification fails, the orchestrator MUST mark the process as unsuccessful and notify participants. As before, it MAY attempt to attribute fault and take or propose appropriate action.
+If any verification fails, the coordinator MUST mark the process as unsuccessful and notify participants. As before, it MAY attempt to attribute fault and take or propose appropriate action.
 
 #### Successful completion
 
-If all validations pass, the orchestrator MUST mark the key generation as successful and inform all participants accordingly.
+If all validations pass, the coordinator MUST mark the key generation as successful and inform all participants accordingly.
 
 _Note_: The verified partial and threshold public keys, as well as the aggregated signature, MAY serve additional purposes. For example, the aggregated signature can fulfill Ethereum's validator requirement for a signed deposit message.
 
 #### Unsuccessful completion
 
-If one or more validations fail, the orchestrator MUST declare the key generation as unsuccessful and inform all participants accordingly.
+If one or more validations fail, the coordinator MUST declare the key generation as unsuccessful and inform all participants accordingly.
 
 ### Participant completion of key generation
 
-Each participant concludes its involvement in the distributed key generation upon receiving a final status message from the orchestrator indicating whether the process was successful or unsuccessful.
+Each participant concludes its involvement in the distributed key generation upon receiving a final status message from the coordinator indicating whether the process was successful or unsuccessful.
 
 If no such message is received within a predetermined timeout, the participant MUST treat the key generation as unsuccessful.
 
@@ -477,11 +477,11 @@ A 32-byte BLS12-381 big-endian scalar / Fr point is used as an index for this ke
 
 Describes the data that is passed between local state instances.
 
-The format used to represent the data here is JSON. The actual format used in a specific implementation will be implementation-dependent. Defining a standard format for exchange between participants and / or generation orchestrator is outside the scope of this document.
+The format used to represent the data here is JSON. The actual format used in a specific implementation will be implementation-dependent. Defining a standard format for exchange between participants and / or generation coordinator is outside the scope of this document.
 
 ### Generation notification
 
-Sent by the generation orchestrator to potential participants in the generation in [this step](#initiation-by-the-orchestrator).
+Sent by the generation coordinator to potential participants in the generation in [this step](#initiation-by-the-coordinator).
 
 MUST contain:
 
@@ -496,9 +496,9 @@ Example (in JSON format):
 }
 ```
 
-### Secret coefficients public keys
+### Polynomial commitment
 
-Sent by a candidate for participant to the generation orchestrator in [this step](#submission-of-polynomial-commitments-to-orchestrator).
+Sent by a candidate for participant to the generation coordinator in [this step](#submission-of-polynomial-commitments-to-coordinator).
 
 MUST contain:
 
@@ -517,7 +517,7 @@ Example (in JSON format):
 
 ### Participation invitation
 
-Sent by the generation orchestrator to an approved candidate for participant in [this step](#distribution-of-polynomial-commitments).
+Sent by the generation coordinator to an approved candidate for participant in [this step](#distribution-of-polynomial-commitments).
 
 MUST contain:
 
@@ -563,7 +563,7 @@ Example (in JSON format):
 
 ### Participant index assignment
 
-Sent by the generation orchestrator to a participant in [this step](#assignment-of-participant-indices).
+Sent by the generation coordinator to a participant in [this step](#assignment-of-participant-indices).
 
 MUST contain:
 
@@ -597,7 +597,7 @@ Example (in JSON format):
 
 ### Generated partial and threshold public keys
 
-Sent by a participant to the generation orchestrator in [this step](#submission-of-data-to-orchestrator).
+Sent by a participant to the generation coordinator in [this step](#submission-of-data-to-orchestrator).
 
 MUST contain:
 
@@ -617,7 +617,7 @@ Example (in JSON format):
 
 ### Signature for verification
 
-Sent by a participant to the generation orchestrator in [this step](#submission-of-data-to-orchestrator).
+Sent by a participant to the generation coordinator in [this step](#submission-of-data-to-orchestrator).
 
 MUST contain:
 
