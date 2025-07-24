@@ -16,12 +16,12 @@
     - [Initial setup](#initial-setup)
     - [Generation of secret coefficients](#generation-of-secret-coefficients)
     - [Generation of secret shares](#generation-of-secret-shares)
-    - [Submission of polynomial commitments to coordinator](#submission-of-polynomial-commitments-to-coordinator)
-    - [Coordinator processing of polynomial commitments](#coordinator-processing-of-polynomial-commitments)
+    - [Submission of coefficient commitments to coordinator](#submission-of-coefficient-commitments-to-coordinator)
+    - [Coordinator processing of coefficient commitments](#coordinator-processing-of-coefficient-commitments)
       - [Commitment verification](#commitment-verification)
     - [Assignment of participant indices](#assignment-of-participant-indices)
-    - [Storing own polynomial commitments and secret shares](#storing-own-polynomial-commitments-and-secret-shares)
-    - [Distribution of polynomial commitments](#distribution-of-polynomial-commitments)
+    - [Storing own coefficient commitments and secret shares](#storing-own-coefficient-commitments-and-secret-shares)
+    - [Distribution of coefficient commitments](#distribution-of-coefficient-commitments)
       - [Handling Broadcast Failures](#handling-broadcast-failures)
     - [Exchange of secret shares between participants](#exchange-of-secret-shares-between-participants)
       - [Security requirements for transmission](#security-requirements-for-transmission)
@@ -44,7 +44,7 @@
     - [Polynomial evaluation algorithm](#polynomial-evaluation-algorithm)
   - [Exchanged data](#exchanged-data)
     - [Generation notification](#generation-notification)
-    - [Polynomial commitment](#polynomial-commitment)
+    - [Coefficient commitments](#coefficient-commitments)
     - [Participation invitation](#participation-invitation)
     - [Participant index assignment](#participant-index-assignment)
     - [Exchanged secret share](#exchanged-secret-share)
@@ -189,7 +189,7 @@ This state MUST maintain the following internal variables:
 - `secret_coefficients`: A list of $t$ private/public keypairs, where $t$ = threshold.
 - `sent_shares`: A list of $n$ private keys (one per participant), derived from the participant's secret coefficients and intended to be shared with the other participants.
 - `received_shares`: A list of $n$ private keys, received from other participants.
-- `polynomial_commitments`: A list of $n$ public polynomial commitment vectors, each consisting of $t$ public keys, received from the other participants and used to validate received secret shares.
+- `coefficient_commitments`: A list of $n$ public coefficient commitment vectors, each consisting of $t$ public keys, received from the other participants and used to validate received secret shares.
 - `key_share`: The final secret key, computed by this participant, representing its share in the distributed private key.
 - `aggregated_commitments`: A list of $t$ public keys representing aggregated commitments at each threshold index.
 
@@ -217,16 +217,16 @@ Following generation of `secret_coefficients`, each candidate MUST generate `tot
 
 The resulting private keys MUST be stored as an ordered list in `sent_shares`, indexed by the respective index of the recipient participant.
 
-### Submission of polynomial commitments to coordinator
+### Submission of coefficient commitments to coordinator
 
 Each candidate for participant MUST submit, as an application for participation in the generation process, a commitment on their `secret_coefficients` to the coordinator. This commitment might be:
 
-- polynomial commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
-- a hash on array of data, mandatorily including the polynomial commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
+- coefficient commitments $C_i = \{g^{a_{i0}}, g^{a_{i1}}, \ldots, g^{a_{i(t-1)}}\}$ — an ordered array of public keys derived from the `secret_coefficients`
+- a hash on array of data, mandatorily including the coefficient commitments, and possibly other public data (examples: the generation count and / or threshold, the public key of the candidate, etc)
 
 Applications MUST be deterministically sortable, for example, by lexicographically ordering their SHA-256 hashes. The sorting method MUST be selected to minimize the probability of collisions, even if candidates collaborate maliciously to produce them.
 
-### Coordinator processing of polynomial commitments
+### Coordinator processing of coefficient commitments
 
 The coordinator MUST open a registration window, defined by a clear deadline (e.g., a specific block height). If fewer than `total_shares` candidates submit a valid application before the window closes, the coordinator MUST declare the generation attempt unsuccessful, as the minimum number of participants has not been met.
 
@@ -251,18 +251,18 @@ One such algorithm might be:
   - `total_shares` (1 byte)
   - `threshold` (1 byte)
   - A unique participant identifier (e.g., communication public key, 32 bytes)
-  - The public keys from the polynomial commitments, hexadecimal-serialized in binary (big-endian) format (96 characters each) and in order
+  - The public keys from the coefficient commitments, hexadecimal-serialized in binary (big-endian) format (96 characters each) and in order
 - Compute a SHA-256 hash of each participant's byte sequence.
 - Sort participants by the numerical value of their hash (interpreted as big-endian integers), smallest-first.
 - Assign participant indices based on the sorted order: the first participant receives index 1, the second receives 2, ..., up to `total_shares`.
 
 The coordinator then MUST communicate the assigned participant index to each participant.
 
-### Storing own polynomial commitments and secret shares
+### Storing own coefficient commitments and secret shares
 
 After receiving their participant index, each participant MUST:
 
-- Store their own polynomial commitments (the ordered array of public keys of their `secret_coefficients`) in position `participant_index` of the local `polynomial_commitments` list.
+- Store their own coefficient commitments (the ordered array of public keys of their `secret_coefficients`) in position `participant_index` of the local `coefficient_commitments` list.
 - Store the corresponding sent secret share (generated by themselves for this participant index) as the `participant_index`-th entry in the `received_shares` list.
 
 _Note_: Participant indices can be pre-assigned along with the generation parameters. This allows early generation of `sent_shares` and simplifies the protocol. However, this approach eliminates the ability to select from a candidate pool and introduces several risks:
@@ -270,9 +270,9 @@ _Note_: Participant indices can be pre-assigned along with the generation parame
 - Trust assumption increase: Participants must fully trust the coordinator to assign indices honestly.
 - ZKP compatibility: Pre-assigned indices not derived deterministically from in-protocol values may complicate or prevent the construction of zero-knowledge proofs of correctness.
 
-### Distribution of polynomial commitments
+### Distribution of coefficient commitments
 
-Once participant indices have been assigned, the coordinator MUST send each participant the full list of polynomial commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their polynomial commitments in the list.
+Once participant indices have been assigned, the coordinator MUST send each participant the full list of coefficient commitments — one for each participant — as a confirmation of inclusion in the generation process. The participant's own commitments MAY be omitted, as they are already known locally. The participant index of every other participant is deduced by the position of their coefficient commitments in the list.
 
 #### Handling Broadcast Failures
 
@@ -280,7 +280,7 @@ This broadcast from the coordinator MUST occur by a predefined deadline. If a pa
 
 Participants that do not receive this confirmation within a predefined timeout MUST assume they were not selected and MUST destroy their local state.
 
-_Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The polynomial commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the coordinator records a commitment for their values.
+_Note_: In a standard or an implementation or protocol built on this specification, this step may be treated as a separate message or bundled with participant index assignment. In the latter case, the participant's own commitments MUST be included, so that the receiver may determine its own participant index by its position in the list. The coefficient commitments MAY be exchanged directly by the participants over a point-to-point channel, as long as the coordinator records a commitment for their values.
 
 ### Exchange of secret shares between participants
 
@@ -300,15 +300,15 @@ Each pairwise exchange MUST occur over a private and authenticated channel. Vali
 
 #### Verification of Secret Shares
 
-Upon receiving a secret share $s_{ij}$ from participant $i$, participant $j$ MUST immediately verify its correctness against the sender's public polynomial commitment. The verification succeeds if the following equation holds:
+Upon receiving a secret share $s_{ij}$ from participant $i$, participant $j$ MUST immediately verify its correctness against the sender's public coefficient commitments. The verification succeeds if the following equation holds:
 
 $$g^{s_{ij}} = \prod_{k=0}^{t-1} (C_{ik})^{j^k}$$
 
 where:
 - $g^{s_{ij}}$ represents the public key corresponding to the received secret share $s_{ij}$
-- $\prod_{k=0}^{t-1} (C_{ik})^{j^k}$ represents the polynomial evaluation using the sender's commitments: the product of the sender's polynomial commitments evaluated at the recipient's index $j$
+- $\prod_{k=0}^{t-1} (C_{ik})^{j^k}$ represents the polynomial evaluation using the sender's commitments: the product of the sender's coefficient commitments evaluated at the recipient's index $j$
 - $s_{ij}$ is the secret share from participant $i$ to participant $j$
-- $C_{ik}$ is the $k$-th commitment in participant $i$'s polynomial commitments
+- $C_{ik}$ is the $k$-th commitment in participant $i$'s coefficient commitments
 - $i$ is the sender's index, $j$ is the recipient's index, $t$ is the threshold
 - All exponentiation occurs in the group $\mathbb{G}_1$
 
@@ -334,7 +334,7 @@ Each participant MUST perform the following:
 - Compute the secret share (key share) by producing a sum of the `received_shares`, modulo the BLS12-381 curve order $r$: $s_i = \sum_{j=1}^n s_{ji} \mod r$. Store the result in the `key_share` field of the local state.
 - Derive the partial public key from the computed key share.
 - For each index $M$ from 0 to `threshold` − 1:
-  - Extract the $M$-th public key from every participant's polynomial commitments (in total, `total_shares` values).
+  - Extract the $M$-th public key from every participant's coefficient commitments (in total, `total_shares` values).
   - Order these public keys according to the participants' indices.
   - Aggregate them into a single public key using the BLS12-381 public key aggregation method.
   - Store the result as the $M$-th entry in the `aggregated_commitments` array.
@@ -372,7 +372,7 @@ Once these have been received, the coordinator MUST perform the following checks
 
 #### Partial public key validation
 
-- Partial public key derivation: Verify that each participant's partial public key is consistent with its submitted polynomial commitments and assigned participant index.
+- Partial public key derivation: Verify that each participant's partial public key is consistent with its submitted coefficient commitments and assigned participant index.
 
 #### Threshold public key validation
 
@@ -509,18 +509,18 @@ Example (in JSON format):
 }
 ```
 
-### Polynomial commitment
+### Coefficient commitments
 
-Sent by a candidate for participant to the generation coordinator in [this step](#submission-of-polynomial-commitments-to-coordinator).
+Sent by a candidate for participant to the generation coordinator in [this step](#submission-of-coefficient-commitments-to-coordinator).
 
 MUST contain:
 
-- polynomial commitments - a list of the public keys of the `secret_coefficients`, preserving their order
+- coefficient commitments - a list of the public keys of the `secret_coefficients`, preserving their order
 
 Example (in JSON format):
 ```
 {
-  "polynomial_commitments": [
+  "coefficient_commitments": [
     "b04e91785bf89610b21a38466e90714fb473276335bf3563a0a079e3427090e47ecccf30e60349cce1c2d1162651ccb0",
     "935314198e2a54dc3922ce6ecfb8a71620972992d81a2674f55821cb3f63c4b6491b0464bb786531e9121ee7e46b235b",
     "a69dff9cb82764ebd716c8ccb50111dcc2011b367b9a93b5250c912ec12358ba88ed0248f5d599de9917cc0e34ac190d"
@@ -530,15 +530,15 @@ Example (in JSON format):
 
 ### Participation invitation
 
-Sent by the generation coordinator to an approved candidate for participant in [this step](#distribution-of-polynomial-commitments).
+Sent by the generation coordinator to an approved candidate for participant in [this step](#distribution-of-coefficient-commitments).
 
 MUST contain:
 
-- a list of polynomial commitments, every one of them a list of `secret_coefficients` public keys of an approved participant.
+- a list of coefficient commitments, every one of them a list of `secret_coefficients` public keys of an approved participant.
 
-The order of the polynomial commitments of the participant MIGHT be that of their participant indices.
+The order of the coefficient commitments of the participant MIGHT be that of their participant indices.
 
-The order of the keys in every polynomial commitment vector MUST be preserved.
+The order of the keys in every coefficient commitment vector MUST be preserved.
 
 Example (in JSON format):
 
@@ -785,7 +785,7 @@ Secret shares:
 4: 0306c118d2aad159459a769705657da29958f51ce68cd70f2773fd95f4b6ef78
 5: 37f2c0590797b8f372f58e8ebfb819838cf0b8a97dec2bb0c13509eb9517d91e
 
-Polynomial commitments:
+Coefficient commitments:
 1 = [
     1: b04e91785bf89610b21a38466e90714fb473276335bf3563a0a079e3427090e47ecccf30e60349cce1c2d1162651ccb0
     2: 935314198e2a54dc3922ce6ecfb8a71620972992d81a2674f55821cb3f63c4b6491b0464bb786531e9121ee7e46b235b
@@ -821,7 +821,7 @@ Secret shares:
 4: 4ec60d6f285d21c4df26b19e5e5f158af9607c01709e9d42e9ffeb03a0fd18f7
 5: 48007dc3599a69761dbae90efc398d18708c7fc779a9cd838b29e991da155642
 
-Polynomial commitments: the same as for participant 1 local state
+Coefficient commitments: the same as for participant 1 local state
 
 Participant 3 local state:
 
@@ -832,7 +832,7 @@ Secret shares:
 4: 15d2751048692dd09fd517da10ec4a05e8238b7dc0bc022bb04359db17d2b8ca
 5: 695988b678dd850c765eeb0ccc957bde8b8bcd080c694afaabf8660f7f6b74b2
 
-Polynomial commitments: the same as for participant 1 local state
+Coefficient commitments: the same as for participant 1 local state
 
 Participant 4 local state:
 
@@ -843,7 +843,7 @@ Secret shares:
 4: 400746a28609f00cee19595a3050cb1e0d1d6b97d6e1bdc77a3e4a1a5937cef3
 5: 281039df3bc38e6e49a7bc80272a0dd08a30fc68362c481723a07f65851a346d
 
-Polynomial commitments: the same as for participant 1 local state
+Coefficient commitments: the same as for participant 1 local state
 
 Participant 5 local state:
 
@@ -853,7 +853,7 @@ Secret shares:
 3: 06fb32482fa3cb504a087feb9da5bac324691bc6cff5193586bb060cd3cd3d20
 4: 5976dad2b7a1eb3196b99e16b2eac0ce1490784cb311741747f0bbc2652c5b71
 
-Polynomial commitments: the same as for participant 1 local state
+Coefficient commitments: the same as for participant 1 local state
 ```
 ## Generated key shares
 ```
