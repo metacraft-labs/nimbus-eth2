@@ -1,0 +1,317 @@
+openapi: 3.0.0
+info:
+  version: 1.0.0
+  title: DVT Key Generation API
+  description: |
+    Serves the DVT key generation process.
+paths:
+  '/eth/v1/dvtgen/init':
+    post:
+      summary: Create a new DVT generation / object
+      operationId: initDKG
+      description: Create and initialize a distributed key generator object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationParams'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/getcomm/{genId}':
+    get:
+      summary: Obtain the candidate for participant base commitment
+      operationId: getCommitment
+      description: Obtain the candidate for participant verification vector / hash
+      parameters:
+        - $ref: '#/components/parameters/GetGenID'
+      responses:
+        '200':
+          $ref: '#/components/responses/CoefficientCommitment'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/approve':
+    post:
+      summary: An approval for participation in a DVT generation
+      operationId: initDKG
+      description: Message to a key generator object an approval for participation in a DVT generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerationApproval'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/partsec/{genId}/{shareId}':
+    get:
+      summary: Obtain participant's sent_share for this shareId
+      operationId: getSecret
+      description: Obtain the participant's sent_share for the participant with this shareId
+      parameters:
+        - $ref: '#/components/parameters/GetGenID'
+        - $ref: '#/components/parameters/GetShareID'
+      responses:
+        '200':
+          $ref: '#/components/responses/PartialSecret'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      summary: Set participant's received_share from this shareId
+      operationId: setSecret
+      description: Set the participant's received_share from the participant with this shareId
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/responses/PartialSecret'
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/results/{genId}':
+    get:
+      summary: Obtain participant's generation results
+      operationId: getSecret
+      description: Obtain the participant's partial public key, aggregated public key and signature
+      parameters:
+        - $ref: '#/components/parameters/GetGenID'
+      responses:
+        '200':
+          $ref: '#/components/responses/PartialResults'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/finish':
+    post:
+      summary: Close or terminate the generation and destroy the DKG object
+      operationId: finish
+      description: The generation is over (prematurely or successfully) - destroy the distributed key generator object.
+      responses:
+        '200':
+          $ref: '#/components/responses/Ok'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  parameters:
+    GetGenID:
+      name: genId
+      in: path
+      description: Generation ID string
+      required: true
+      schema:
+        $ref: '#/components/schemas/GenID'
+    GetShareID:
+      name: shareId
+      in: path
+      description: Unique participant index (share ID)
+      required: true
+      schema:
+        $ref: '#/components/schemas/ShareID'
+  responses:
+    Ok:
+      description: Success
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: Ok
+            required:
+              - result
+    InvalidRequest:
+      description: Failure (invalid data supplied)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: InvalidRequest
+            required:
+              - result
+    Unauthorized:
+      description: Failure (not authorized to do this)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: Unauthorized
+            required:
+              - result
+    CoefficientCommitment:
+      description: Public keys of the generation base coefficients for this candidate for participant
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: Ok
+              genId:
+                $ref: '#/components/schemas/GenID'
+              vector:
+                $ref: '#/components/schemas/BlsPublicKeyHexArray'
+              hash:
+                $ref: '#/components/schemas/Sha256Hash'
+            required:
+              - result
+              - genId
+              - oneOf:
+                - vector
+                - hash
+    PartialSecret:
+      description: A participant's sent_share / received_share for another participant, and possibly its coeffcients vector.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: Ok
+              genId:
+                $ref: '#/components/schemas/GenID'
+              shareId:
+                descrition: ShareID of the sender
+              secret:
+                $ref: '#/components/schemas/BlsSecretKeyHex'
+              vector:
+                $ref: '#/components/schemas/BlsPublicKeyHexArray'
+            required:
+              - result
+              - genId
+              - shareId
+              - secret
+    PartialResults:
+      description: Participant's partial public key, aggregated public key and signature
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              result:
+                description: Operation Result
+                type: string
+                const: Ok
+              partialPubkey:
+                $ref: '#/components/schemas/BlsPublicKeyHex'
+              aggregatePubkey:
+                $ref: '#/components/schemas/BlsPublicKeyHex'
+              signature:
+                $ref: '#/components/schemas/BlsSignatureHex'
+            required:
+              - result
+              - partialPubkey
+              - aggregatePubkey
+              - signature
+  schemas:
+    GenerationParams:
+      description: New DVT generation params
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              genId:
+                $ref: '#/components/schemas/GenID'
+              total_shares:
+                $ref: '#/components/schemas/TotalShares'
+              threshold:
+                $ref: '#/components/schemas/Threshold'
+            required:
+              - genId
+              - total_shares
+              - threshold
+    GenerationApproval:
+      description: Data needed for participating in a DVT key generation
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              genId:
+                $ref: '#/components/schemas/GenID'
+              shareId:
+                $ref: '#/components/schemas/ShareID'
+              vectors:
+                $ref: '#/components/schemas/BlsPublicKeyHexArrayArray'
+              hashes:
+                $ref: '#/components/schemas/Sha256HexArray'
+            required:
+              - genId
+              - shareId
+              - oneOf:
+                - vectors
+                - hashes
+    GenID:
+      type: string
+      minLength: 16
+      maxLength: 96
+      pattern: ^[0-9A-Za-z\\_\\-]+$
+    TotalShares:
+      type: integer
+      minimum: 1
+    Threshold:
+      type: integer
+      minimum: 1
+    ShareID:
+      type: integer
+      minimum: 1
+    Sha256HashHex:
+      type: string
+      pattern: ^[0-9A-Fa-f]{64}$
+    Sha256HashHexArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/Sha256HashHex'
+    BlsSecretKeyHex:
+      type: string
+      pattern: ^[0-9A-Fa-f]{64}$
+    BlsPublicKeyHex:
+      type: string
+      pattern: ^[0-9A-Fa-f]{96}$
+    BlsPublicKeyHexArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/BlsPublicKeyHex'
+    BlsPublicKeyHexArrayArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/BlsPublicKeyHexArray'
+    BlsSignatureHex:
+      type: string
+      pattern: ^[0-9A-Fa-f]{192}$
