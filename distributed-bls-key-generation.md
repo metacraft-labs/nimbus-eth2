@@ -206,7 +206,7 @@ Upon creating the local state, each candidate for participant MUST initialize th
 
 During the initialization, the candidate MUST also use the following procedure to generate secret coefficients and store them in the local state:
 
-- Obtaining a sufficient amount of randomness from a cryptographically secure source
+- Obtain a sufficient amount of randomness from a cryptographically secure source
 - Use the obtained randomness to generate `threshold` private/public keypairs (`secret_coefficients`), using the [BLS12-381 keypair generation algorithm](#bls12-381-keypair-generation-algorithm).
 
 _Note_: The `secret_coefficients` MUST NOT be derived from deterministic or low-entropy seeds such as hierarchical deterministic (HD) paths or mnemonic phrases. Exposure of such seeds would enable an attacker to reconstruct all key shares, compromising the entire distributed key.
@@ -484,7 +484,7 @@ This algorithm is used in the calculation a distributed key share (a secret key)
 
 A list of the `secret_coefficients` secret keys is used as polynomial coefficients.
 
-A 32-byte BLS12-381 big-endian scalar / Fr point is used as an index for this key share. It is obtained by converting the participant's index to a 256-bit big-endian unsigned integer.
+The participant index (an integer $1 \le i \le n$) is encoded as a **32‑byte, big‑endian, zero‑padded unsigned integer**. The resulting byte string is then **interpreted as an element of the BLS12‑381 scalar field $\mathbb F_r$**. This 32‑byte scalar is used as the evaluation point for the participant’s key share.
 
 ## Exchanged data
 
