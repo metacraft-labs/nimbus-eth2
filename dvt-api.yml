@@ -40,7 +40,7 @@ paths:
   '/eth/v1/dvtgen/approve':
     post:
       summary: An approval for participation in a DVT generation
-      operationId: initDKG
+      operationId: approveParticipant
       description: Message to a key generator object an approval for participation in a DVT generation
       requestBody:
         required: true
@@ -70,6 +70,7 @@ paths:
           $ref: '#/components/responses/InvalidRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  '/eth/v1/dvtgen/partsec':
     post:
       summary: Set participant's received_share from this shareId
       operationId: setSecret
@@ -79,7 +80,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/responses/PartialSecret'
+              $ref: '#/components/schemas/PartialSecret'
       responses:
         '200':
           $ref: '#/components/responses/Ok'
@@ -90,7 +91,7 @@ paths:
   '/eth/v1/dvtgen/results/{genId}':
     get:
       summary: Obtain participant's generation results
-      operationId: getSecret
+      operationId: getResults
       description: Obtain the participant's partial public key, aggregated public key and signature
       parameters:
         - $ref: '#/components/parameters/GetGenID'
@@ -140,7 +141,6 @@ components:
               result:
                 description: Operation Result
                 type: string
-                const: Ok
             required:
               - result
     InvalidRequest:
@@ -153,7 +153,6 @@ components:
               result:
                 description: Operation Result
                 type: string
-                const: InvalidRequest
             required:
               - result
     Unauthorized:
@@ -166,7 +165,6 @@ components:
               result:
                 description: Operation Result
                 type: string
-                const: Unauthorized
             required:
               - result
     CoefficientCommitment:
@@ -174,109 +172,106 @@ components:
       content:
         application/json:
           schema:
-            type: object
-            properties:
-              result:
-                description: Operation Result
-                type: string
-                const: Ok
-              genId:
-                $ref: '#/components/schemas/GenID'
-              vector:
-                $ref: '#/components/schemas/BlsPublicKeyHexArray'
-              hash:
-                $ref: '#/components/schemas/Sha256Hash'
-            required:
-              - result
-              - genId
-              - oneOf:
-                - vector
-                - hash
+            $ref: '#/components/schemas/CoefficientCommitment'
     PartialSecret:
       description: A participant's sent_share / received_share for another participant, and possibly its coeffcients vector.
       content:
         application/json:
           schema:
-            type: object
-            properties:
-              result:
-                description: Operation Result
-                type: string
-                const: Ok
-              genId:
-                $ref: '#/components/schemas/GenID'
-              shareId:
-                descrition: ShareID of the sender
-              secret:
-                $ref: '#/components/schemas/BlsSecretKeyHex'
-              vector:
-                $ref: '#/components/schemas/BlsPublicKeyHexArray'
-            required:
-              - result
-              - genId
-              - shareId
-              - secret
+            $ref: '#/components/schemas/PartialSecret'
     PartialResults:
       description: Participant's partial public key, aggregated public key and signature
       content:
         application/json:
           schema:
-            type: object
-            properties:
-              result:
-                description: Operation Result
-                type: string
-                const: Ok
-              partialPubkey:
-                $ref: '#/components/schemas/BlsPublicKeyHex'
-              aggregatePubkey:
-                $ref: '#/components/schemas/BlsPublicKeyHex'
-              signature:
-                $ref: '#/components/schemas/BlsSignatureHex'
-            required:
-              - result
-              - partialPubkey
-              - aggregatePubkey
-              - signature
+            $ref: '#/components/schemas/PartialResults'
   schemas:
     GenerationParams:
-      description: New DVT generation params
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              genId:
-                $ref: '#/components/schemas/GenID'
-              total_shares:
-                $ref: '#/components/schemas/TotalShares'
-              threshold:
-                $ref: '#/components/schemas/Threshold'
-            required:
-              - genId
-              - total_shares
-              - threshold
+      description: DVT generation params
+      type: object
+      properties:
+        genId:
+          $ref: '#/components/schemas/GenID'
+        total_shares:
+          $ref: '#/components/schemas/TotalShares'
+        threshold:
+          $ref: '#/components/schemas/Threshold'
+      required:
+        - genId
+        - total_shares
+        - threshold
+    CoefficientCommitment:
+      type: object
+      properties:
+        result:
+          description: Operation Result
+          type: string
+        genId:
+          $ref: '#/components/schemas/GenID'
+        vector:
+          $ref: '#/components/schemas/BlsPublicKeyHexArray'
+        hash:
+          $ref: '#/components/schemas/Sha256HashHex'
+      required:
+        - result
+        - genId
+      oneOf:
+        - required: [vector]
+        - required: [hash]
     GenerationApproval:
       description: Data needed for participating in a DVT key generation
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              genId:
-                $ref: '#/components/schemas/GenID'
-              shareId:
-                $ref: '#/components/schemas/ShareID'
-              vectors:
-                $ref: '#/components/schemas/BlsPublicKeyHexArrayArray'
-              hashes:
-                $ref: '#/components/schemas/Sha256HexArray'
-            required:
-              - genId
-              - shareId
-              - oneOf:
-                - vectors
-                - hashes
+      type: object
+      properties:
+        genId:
+          $ref: '#/components/schemas/GenID'
+        shareId:
+          $ref: '#/components/schemas/ShareID'
+        vectors:
+          $ref: '#/components/schemas/BlsPublicKeyHexArrayArray'
+        hashes:
+          $ref: '#/components/schemas/Sha256HashHexArray'
+      required:
+        - genId
+        - shareId
+      oneOf:
+        - required: [vectors]
+        - required: [hashes]
+    PartialSecret:
+      type: object
+      properties:
+        result:
+          description: Operation Result
+          type: string
+        genId:
+          $ref: '#/components/schemas/GenID'
+        shareId:
+          $ref: '#/components/schemas/ShareID'
+        secret:
+          $ref: '#/components/schemas/BlsSecretKeyHex'
+        vector:
+          $ref: '#/components/schemas/BlsPublicKeyHexArray'
+      required:
+        - result
+        - genId
+        - shareId
+        - secret
+    PartialResults:
+      type: object
+      properties:
+        result:
+          description: Operation Result
+          type: string
+        partialPubkey:
+          $ref: '#/components/schemas/BlsPublicKeyHex'
+        aggregatePubkey:
+          $ref: '#/components/schemas/BlsPublicKeyHex'
+        signature:
+          $ref: '#/components/schemas/BlsSignatureHex'
+      required:
+        - result
+        - partialPubkey
+        - aggregatePubkey
+        - signature
     GenID:
       type: string
       minLength: 16
