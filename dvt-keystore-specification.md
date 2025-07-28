@@ -9,6 +9,7 @@ This is not a final version of the document. The following problems must be solv
 - [Simple Summary](#simple-summary)
 - [Abstract](#abstract)
 - [Motivation](#motivation)
+- [Terminology](#terminology)
 - [Specification](#specification)
   - [Stored information](#stored-information)
   - [Sensitive Info](#sensitive-info)
@@ -23,69 +24,66 @@ This is not a final version of the document. The following problems must be solv
     - [JSON schema](#json-schema-1)
     - [Test vectors](#test-vectors-1)
       - [Generation info](#generation-info-1)
-      - [Partial key info](#partial-key-info-1)
+      - [Key share info](#key-share-info)
         - [Web3Signer configuration](#web3signer-configuration)
         - [RAFT configuration](#raft-configuration)
         - [HostStuff configuration](#hotstuff-configuration)
 
 # Simple Summary
 
-This document describes a format for securely storing either:
-
-- a BLS12-381 partial secret key (key share), generated for usage within a DVT cluster for threshold signing
-- detailed log of the progress of the distributed key generation (DKG) protocol while the key share is being generated
-- configuration that utilize remote signers in various threshold signing scenarios
-
-The format can store also all supplementary information needed by DVT cluster consensus protocols.
+This document describes a standardized format for securely storing BLS12-381 partial secret keys (key shares) and the detailed log of the states of their Distributed Key Generation (DKG) process. It also accommodates configuration data required by Distributed Validator Technology (DVT) clusters for threshold signing and remote signer integration.
 
 # Abstract
 
-The distributed generation of a distributed BLS12-381 key can take significant time, particularly in liquid staking protocols based on smart contracts where the quick exchange of information between participants is not granted. During this time, the work of the generator modules can be interrupted by a number of events - software or hardware failure, software or hardware upgrade or migration, etc. To continue with the generation process after such an event, the DKG module state must be preserved and recovered. The procedure will be to log every state change, and to read the log and recover the generator module state from it after an interruption.
+The distributed generation of a BLS12-381 key can be a time-consuming process, especially within liquid staking protocols operating on smart contracts where rapid information exchange between participants may be constrained. During this period, Distributed Key Generation (DKG) module operations can be interrupted by various events such as software or hardware failures, upgrades, or migrations. To ensure continuity and enable recovery from such interruptions, the DKG module's state must be persistently stored and accurately restored. This specification proposes a logging mechanism for every state change, enabling recovery of the generator module's state by replaying or parsing the log.
 
-To enable such a storing and re-reading even after a software migration, a standardized format is needed, that ensures interoperability between the different software implementations. This document proposes such a format.
-
-# Terminology
-
-The keywords "MUST", "MUST NOT", "MAY" and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
-
-TODO: Add definition for DVT cluster that references another spec.
-TODO: Add definition for Threshold signing that references another spec.
-TODO: Add definition for DVT cluster consensus protocol.
-TODO: Add definition for DKG that references another spec.
+To facilitate interoperability and data continuity across different software implementations, even after software migrations, this document defines a standardized format for both storing the DKG process state and the resulting BLS12-381 key shares.
 
 # Motivation
 
-Distributed keys, eg. conforming to the Shamir Secret Sharing (SSS) scheme, are a convenient tool for minimizing the risk of theft or malicious use of Ethereum validator keys. Their generation in one place however creates a SPOF where the key can be compromised, negating some of the most important advantages of this scheme.
+Distributed keys, often conforming to the Shamir Secret Sharing (SSS) scheme, are invaluable for minimizing the risk of theft or malicious use of Ethereum validator keys. However, generating these keys in a centralized manner introduces a single point of failure (SPOF), which can undermine a primary advantage of the scheme.
 
-Algorithms exist to generate a distributed set of keys in a distributed manner, so no entity ever gets access to more than one of the key shares. These algorithms however MAY take significant time (e.g. days). During this time, a system restart might happen, or software upgrade or migration might be required. This necessitates the ability to securely store the state of a distributed key generator, and to recover the generator state from there. For maximal convenience and data continuity, the object that stores the generator state should best be able to store the generated key too.
+Algorithms for generating a distributed set of keys in a decentralized manner exist, ensuring that no single entity ever obtains more than one key share. These Distributed Key Generation (DKG) algorithms can be lengthy processes, potentially spanning days. During this time, system restarts, failures, or necessary hardware/software upgrades may occur. This necessitates a secure method to store the state of a distributed key generator and enable its recovery. For maximum convenience and data integrity, the storage object should ideally accommodate both the generator's state and the final generated key share.
 
-The popular [EIP-2335](https://eips.ethereum.org/EIPS/eip-2335) format has proven its applicability for storing an Ethereum validator key, together with other info concerning this key and needed by the validator. However, its current version does not offer the ability to store and possibly recreate the generator state.
+Furthermore, distributed keys can be combined with remote or hardware signers, adding additional layers of protection for sensitive key shares, and the storage object must be able to describe that.
 
-Distributed keys can be utilized together with remote or hardware signers to create further layers of protection for the senstive key shares.
+While the widely adopted EIP-2335: BLS12-381 Keystore format is effective for storing an Ethereum validator key and its associated metadata, its current version does not natively support storing or recreating generator states, nor does it encompass all information required by certain DVT cluster implementations.
 
-Also, different consensus algorithms need different supplementary information. Storing this information together with the key share / the generator states can be useful and convenient, as the usage of the EIP-2335 format has proven.
+This proposed format aims to address these limitations.
 
-The format proposed here aims to solve these problems.
+# Terminology
+
+The keywords "MUST", "MUST NOT", "MAY", and "SHOULD" in this document are to be interpreted as described in [RFC2119](https://www.rfc-editor.org/rfc/rfc2119.txt).
+
+- **DVT Cluster**: A collection of independent nodes that collectively manage and operate a single Ethereum validator key using **Distributed Validator Technology (DVT)**. This setup enhances validator resilience and fault tolerance by distributing the responsibility of key management and signing.
+
+- **Threshold Signing**: A cryptographic scheme where a valid aggregate signature for a specific message can only be produced if a minimum number (`threshold`) of designated participants (each holding a share of the secret key) contribute their partial signatures. This technique is often based on **Shamir Secret Sharing (SSS)**.
+
+- **DVT Cluster Consensus Protocol**: A distributed consensus mechanism employed by the nodes within a DVT cluster. This protocol enables these nodes to achieve agreement on shared states, synchronize operations, and coordinate signing activities, ensuring the integrity and liveness of the distributed validator. Examples include adapted versions of RAFT or HotStuff.
+
+- **DKG (Distributed Key Generation)**: A cryptographic protocol that enables a group of participants to jointly compute a shared secret key and its corresponding public key. Crucially, no single participant ever learns the entire secret key; instead, each participant obtains only a **share** of the secret key. The DKG process ensures that the resulting key is genuinely distributed and resists single-point compromises.
+
+# Specification
 
 ## Stored information
 
-The partial secret key is sensitive, and must be preserved in an encrypted storage for the duration of its existence and usage.
+A secret key that is part of a distributed set of keys (termed here "secret key share") is highly sensitive and MUST be stored in an encrypted format for its entire lifecycle, including generation and usage.
 
-The secrets and the states involved in the key generation procedure are sensitive too, as the partial keys can be derived from them. Therefore, they must be preserved in an encrypted storage for the duration of the procedure. This ensures that, if the generation is interrupted - eg. due to a restart, software upgrade or migration to a different software - it will be able to recover its state and continue from the point of interruption on. To allow this, we store the generator states as a log, described in [TODO!]().
+The secrets and intermediate states involved in the key generation procedure are equally sensitive, as derived key shares could be compromised if this information is exposed. Therefore, they MUST also be preserved in encrypted storage for the duration of the DKG procedure. This ensures that if the generation process is interrupted (e.g., due to a restart, software upgrade, or migration to a different software), it can recover its state and continue from the point of interruption. To facilitate this, generator states are stored as a log, whose standardized format is described in the Sensitive Info JSON Schema section of this document, specifically the GenerationInfo object.
 
-The format we propose is based on the tested and successful [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335). The semantics of the fields `crypto`, `pubkey`, `description`, `version` and `uuid` is fully preserved. We extend it with fields for the information needed by the different consensus algorithms that it might be used for, and with ability to store in encrypted form either an already generated BLS partial key (key share), or a log of DVT key generation states (if the generation hasn't finished yet).
+The storage format proposed here is built upon the well-established and successful EIP-2335: BLS12-381 Keystore. The semantics of the crypto, pubkey, description, version, and uuid fields from EIP-2335 are fully preserved. We extend this foundation with additional fields necessary for various DVT cluster consensus algorithms and with the capability to store, in encrypted form, either a fully generated BLS secret key share or a log of DVT key generation states if the generation process is still ongoing.
 
 ## Sensitive Info
 
-The sensitive information that must be stored encrypted (either a BLS secret key or a log of generation states and their parameters) is defined as an Sensitive Info object.
+The sensitive information, which includes either a BLS secret key share or a log of generation states and their parameters, is defined as a Sensitive Info object.
 
-It MUST be stored in JSON format, as described [here](#sensitive-info-1).
+This object MUST be stored in JSON format, as detailed in the [Sensitive Info JSON Schema section](#sensitive-info-1).
 
 ## DVT Keystore
 
-The Sensitive Info object is encrypted and stored in the `crypto` field of a DVT Keystore object.
+The Sensitive Info object is encrypted and stored within the `crypto.message` field of a DVT Keystore object.
 
-The DVT Keystore object itself must be stored in JSON format, as described [here](#dvt-keystore-1).
+The DVT Keystore object itself MUST be stored in JSON format, as described in the [DVT Keystore JSON Schema](#dvt-keystore-1).
 
 # JSON schemas and test vectors
 
@@ -121,9 +119,7 @@ The DVT Keystore object itself must be stored in JSON format, as described [here
             "required": [
                 "logEntries"
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "LogEntry": {
             "type": "object",
@@ -153,9 +149,7 @@ The DVT Keystore object itself must be stored in JSON format, as described [here
                     "$ref": "#/definitions/LogEntry_Finish"
                 }
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "LogEntry_Init": {
             "properties": {
@@ -362,7 +356,7 @@ The DVT Keystore object itself must be stored in JSON format, as described [here
   ]
 }
 
-#### Partial key info
+#### Secret key share info
 {
   "extraField": "some value",
   "seckey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -370,7 +364,7 @@ The DVT Keystore object itself must be stored in JSON format, as described [here
 
 ## DVT Keystore
 
-The object that stores the sensitive information - generated BLS partial key, or secrets and states involved in its generation - is termed "DVT keystore".
+The object that stores the sensitive information - generated BLS secret key share, or secrets and states involved in its generation - is termed "DVT keystore".
 
 The sensitive information MUST be stored in an encrypted form. The proposed format is based on [EIP-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335), with the sensitive information object as the encrypted secret.
 
@@ -408,9 +402,7 @@ The DVT keystore MUST be stored in JSON format.
                 "version",
                 "remotes"
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "GenerationStore": {
             "properties": {
@@ -430,12 +422,10 @@ The DVT keystore MUST be stored in JSON format.
                 "generationId",
                 "crypto"
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "BlsSecretKeyStore": {
-            "definitions": {
+            "properties": {
                 "status": {
                     "type": "string",
                     "const": "BlsSecretKey"
@@ -444,14 +434,14 @@ The DVT keystore MUST be stored in JSON format.
                     "$ref": "#/definitions/ShareID"
                 },
                 "remotes": {
-                    "$ref": "#/definition/DvtRemotes"
+                    "$ref": "#/definitions/DvtRemotes"
                 },
                 "threshold": {
                     "type": "integer",
                     "minimum": 1
                 },
                 "crypto": {
-                    "$ref": "#/defintions/Crypto"
+                    "$ref": "#/definitions/Crypto"
                 },
                 "pubkey": {
                     "$ref": "#/definitions/BlsPublicKeyHex"
@@ -471,9 +461,7 @@ The DVT keystore MUST be stored in JSON format.
                 "crypto",
                 "remotes"
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "GenerationId": {
             "type": "string",
@@ -583,7 +571,7 @@ The DVT keystore MUST be stored in JSON format.
         },
         "DvtRemote": {
             "type": "object",
-            "parameters": {
+            "properties": {
                 "url": {
                     "type": "string"
                 },
@@ -591,7 +579,7 @@ The DVT keystore MUST be stored in JSON format.
                     "$ref": "#/definitions/ShareID"
                 },
                 "pubkey": {
-                    "$ref": "BlsPublicKeyHex"
+                    "$ref": "#/definitions/BlsPublicKeyHex"
                 }
             },
             "required": [
@@ -599,9 +587,7 @@ The DVT keystore MUST be stored in JSON format.
                 "shareId",
                 "pubkey"
             ],
-            "additionalProperties": {
-                "not": false
-            }
+            "additionalProperties": true
         },
         "BlsPublicKeyHex": {
             "type": "string",
@@ -661,11 +647,12 @@ The DVT keystore MUST be stored in JSON format.
       },
   ],
   "status": "generation",
+  "threshold": 2,
   "version": 1
 }
 ```
 
-#### Partial key info
+#### Key share info
 
 ##### Web3Signer configuration
 ```
@@ -688,6 +675,7 @@ The DVT keystore MUST be stored in JSON format.
     },
   },
   "extraField": "some value",
+  "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "remoteSignerType": "Web3Signer",
   "remotes": [
       {
@@ -709,6 +697,7 @@ The DVT keystore MUST be stored in JSON format.
   "shareId": 1,
   "signingMethod": "web3signer",
   "status": "BlsSecretKey",
+  "threshold": 2,
   "version": 1
 }
 ```
@@ -734,6 +723,7 @@ The DVT keystore MUST be stored in JSON format.
     },
   },
   "extraField": "some value",
+  "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "raftPrivateKey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "raftUuid": "7470c18d-e80a-49f4-910a-c8822dde1c2d",
   "remotes": [
@@ -756,14 +746,16 @@ The DVT keystore MUST be stored in JSON format.
   "shareId": 1,
   "signingMethod": "raft",
   "status": "BlsSecretKey",
+  "threshold": 2,
   "version": 1
 }
 ```
 
 ##### HotStuff configuration
 
-Future versions of this format MAY add support for more consensus algorithms and / or other types of sensitive information.
-As an example, consider the potential addition of Hotstuff as a DVT cluster consensus protocol. The following DVT keystore might become a valid configuration:
+Future versions of this format MAY add support for more consensus algorithms and/or other types of sensitive information. As an example, consider the potential addition of HotStuff as a DVT cluster consensus protocol. The following DVT keystore might become a valid configuration:
+
+(TODO: review protocol and append / fix if needed!)
 
 ```
 {
@@ -785,6 +777,10 @@ As an example, consider the potential addition of Hotstuff as a DVT cluster cons
     },
   },
   "extraField": "some value",
+  "networkConfig": {
+    "genesisHash": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+  },
+  "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "remotes": [
       {
           "url": "https://example1.net",
@@ -805,6 +801,7 @@ As an example, consider the potential addition of Hotstuff as a DVT cluster cons
   "shareId": 1,
   "signingMethod": "hotstuff",
   "status": "BlsSecretKey",
+  "threshold": 2,
   "version": 1,
 }
 ```
