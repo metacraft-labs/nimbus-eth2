@@ -453,6 +453,9 @@ The DVT keystore MUST be stored in JSON format.
                 },
                 {
                     "$ref": "#/definitions/Raft"
+                },
+                {
+                    "$ref": "#/definitions/HotStuff"
                 }
             ],
             "required": [
@@ -563,6 +566,21 @@ The DVT keystore MUST be stored in JSON format.
                 "raftUuid"
             ]
         },
+        "HotStuff": {
+            "properties": {
+                "signingMethod": {
+                    "type": "string",
+                    "const": "hotstuff"
+                },
+                "genesisNode": {
+                    "type": "string",
+                    "pattern": "^[0-9A-Fa-f]+$"
+                }
+            },
+            "required": [
+                "signingMethod"
+            ]
+        },
         "DvtRemotes": {
             "type": "array",
             "items": {
@@ -580,6 +598,9 @@ The DVT keystore MUST be stored in JSON format.
                 },
                 "pubkey": {
                     "$ref": "#/definitions/BlsPublicKeyHex"
+                },
+                "networkId": {
+                    "$ref": "#/definitions/NetworkID"
                 }
             },
             "required": [
@@ -600,6 +621,9 @@ The DVT keystore MUST be stored in JSON format.
         "ShareID": {
             "type": "integer",
             "minimum": 1
+        },
+        "NetworkID": {
+            "type": "string"
         }
     }
 }
@@ -755,8 +779,6 @@ The DVT keystore MUST be stored in JSON format.
 
 Future versions of this format MAY add support for more consensus algorithms and/or other types of sensitive information. As an example, consider the potential addition of HotStuff as a DVT cluster consensus protocol. The following DVT keystore might become a valid configuration:
 
-(TODO: review protocol and append / fix if needed!)
-
 ```
 {
   "crypto": {
@@ -777,25 +799,26 @@ Future versions of this format MAY add support for more consensus algorithms and
     },
   },
   "extraField": "some value",
-  "networkConfig": {
-    "genesisHash": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
-  },
+  "genesisNode": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
   "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "remotes": [
       {
           "url": "https://example1.net",
           "shareId": 1,
-          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "networkId": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
       },
       {
           "url": "https://example2.net",
           "shareId": 2,
-          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "networkId": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
       },
       {
           "url": "https://example3.net",
           "shareId": 3,
-          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+          "pubkey": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "networkId": "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
       },
   ],
   "shareId": 1,
