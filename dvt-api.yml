@@ -178,7 +178,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/PartialSecret'
+            $ref: '#/components/schemas/PartialSecretResponse'
     PartialResults:
       description: Participant's partial public key, aggregated public key and signature
       content:
@@ -203,17 +203,11 @@ components:
     CoefficientCommitment:
       type: object
       properties:
-        result:
-          description: Operation Result
-          type: string
-        genId:
-          $ref: '#/components/schemas/GenID'
         vector:
           $ref: '#/components/schemas/BlsPublicKeyHexArray'
         hash:
           $ref: '#/components/schemas/Sha256HashHex'
       required:
-        - result
         - genId
       oneOf:
         - required: [vector]
@@ -239,9 +233,6 @@ components:
     PartialSecret:
       type: object
       properties:
-        result:
-          description: Operation Result
-          type: string
         genId:
           $ref: '#/components/schemas/GenID'
         shareId:
@@ -251,16 +242,24 @@ components:
         vector:
           $ref: '#/components/schemas/BlsPublicKeyHexArray'
       required:
-        - result
         - genId
+        - shareId
+        - secret
+    PartialSecretResponse:
+      type: object
+      properties:
+        shareId:
+          $ref: '#/components/schemas/ShareID'
+        secret:
+          $ref: '#/components/schemas/BlsSecretKeyHex'
+        vector:
+          $ref: '#/components/schemas/BlsPublicKeyHexArray'
+      required:
         - shareId
         - secret
     PartialResults:
       type: object
       properties:
-        result:
-          description: Operation Result
-          type: string
         partialPubkey:
           $ref: '#/components/schemas/BlsPublicKeyHex'
         aggregatePubkey:
@@ -268,7 +267,6 @@ components:
         signature:
           $ref: '#/components/schemas/BlsSignatureHex'
       required:
-        - result
         - partialPubkey
         - aggregatePubkey
         - signature
