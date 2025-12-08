@@ -1,0 +1,743 @@
+openapi: 3.0.3
+info:
+  title: Ethereum Raft Messaging API
+  description: API for sending and managing Raft consensus messages within an Ethereum-based network.
+  version: 1.4.0
+servers:
+  - url: https://api.yourdomain.com
+    description: Production server
+  - url: https://staging-api.yourdomain.com
+    description: Staging server
+paths:
+  /eth/v1/raft/message:
+    post:
+      summary: Send Raft consensus messages
+      description: |
+        Sends Raft consensus messages to the specified node within the Ethereum network. This endpoint handles various types of Raft RPC messages necessary for consensus operations among nodes.
+      tags:
+        - Raft
+        - Ethereum
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaftMessages'
+            example:
+              raw_message:
+                - c: 5
+                  s: "843bc4d9"
+                  r: "aefb2eda"
+                  a: 0
+                - c: 5
+                  s: "843bc4d9"
+                  r: "9852b468"
+                  a: 0
+              anon_messages:
+                - k: "AppendRequest"
+                  a:
+                    previousTerm: 4
+                    previousLogIndex: 10
+                    commitIndex: 10
+                    entries:
+                      - index: 11
+                        term: 5
+                        command: "transfer:100ETH"
+              signatures:
+                - messageHash: "abcd1234ef567890abcd1234ef5678"
+                  signature: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+                  blsId: 1234567890
+      responses:
+        '200':
+          description: Messages successfully processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Raft messages processed successfully."
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Invalid messageType provided."
+        '401':
+          description: Unauthorized access
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "Authentication required."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: false
+                  error:
+                    type: string
+                    example: "An unexpected error occurred."
+      security:
+        - ApiKeyAuth: []
+  
+  /eth/v1/raft/reroute:
+    post:
+      summary: Reroute signing request to Raft validator
+      description: |
+        Allows rerouting a Web3Signer signing request to a Raft validator. This endpoint is used
+        when a signing request needs to be processed by a Raft-managed validator. The request
+        includes the signing request data, the validator's public key, and an authentication signature.
+      tags:
+        - Raft
+        - Ethereum
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaftRerouteRequest'
+            example:
+              request:
+                kind: "ATTESTATION"
+                fork_info:
+                  fork:
+                    previous_version: "0x00000000"
+                    current_version: "0x01000000"
+                    epoch: 0
+                  genesis_validators_root: "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
+                attestation:
+                  slot: 12345
+                  index: 0
+                  beacon_block_root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+                  source:
+                    epoch: 100
+                    root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+                  target:
+                    epoch: 101
+                    root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+              validator_pubkey: "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3a2753e5f3e8b1cfe39b56f43611df74a"
+              auth: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      responses:
+        '200':
+          description: Signing request successfully processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RaftRerouteResponse'
+              example:
+                data: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        '400':
+          description: Invalid input data or not a Raft validator
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Not raft validator"
+        '404':
+          description: Validator not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "validator not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "An unexpected error occurred."
+      security:
+        - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+  schemas:
+    RaftMessages:
+      type: object
+      required:
+        - raw_message
+        - signatures
+        - anon_messages
+      properties:
+        raw_message:
+          type: array
+          items:
+            $ref: '#/components/schemas/RaftRpcMessageRef'
+          description: |
+            Array of message references containing sender, receiver, term, and an index
+            pointing to the actual message payload in anon_messages. This allows multiple
+            messages with the same payload to share a single entry in anon_messages.
+        anon_messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/RaftPackedMessage'
+          description: |
+            Array of deduplicated message payloads. Messages are referenced by index
+            from raw_message entries, enabling bandwidth optimization when broadcasting
+            the same message to multiple receivers.
+        signatures:
+          type: array
+          items:
+            $ref: '#/components/schemas/RaftSignatureInfo'
+          description: A sequence of signature information for the messages.
+        auth_validator_id:
+          $ref: '#/components/schemas/RaftNodeId'
+          description: Optional validator ID for authentication (currently unused).
+      example:
+        raw_message:
+          - c: 5
+            s: "843bc4d9"
+            r: "aefb2eda"
+            a: 0
+          - c: 5
+            s: "843bc4d9"
+            r: "9852b468"
+            a: 0
+        anon_messages:
+          - k: "AppendRequest"
+            a:
+              previousTerm: 4
+              previousLogIndex: 10
+              commitIndex: 10
+              entries:
+                - index: 11
+                  term: 5
+                  command: "transfer:100ETH"
+        signatures:
+          - messageHash: "abcd1234ef567890abcd1234ef5678"
+            signature: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+            blsId: 1234567890
+
+    RaftRpcMessageRef:
+      type: object
+      required:
+        - c
+        - s
+        - r
+        - a
+      properties:
+        c:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: Current term (serialized as 'c' for bandwidth optimization).
+          example: 5
+        s:
+          $ref: '#/components/schemas/RaftNodeId'
+          description: Sender node ID (serialized as 's' for bandwidth optimization).
+          example: "843bc4d9"
+        r:
+          $ref: '#/components/schemas/RaftNodeId'
+          description: Receiver node ID (serialized as 'r' for bandwidth optimization).
+          example: "aefb2eda"
+        a:
+          type: integer
+          format: uint32
+          description: |
+            Anonymous message index (serialized as 'a' for bandwidth optimization).
+            Points to the index in the anon_messages array containing the actual message payload.
+          example: 0
+      example:
+        c: 5
+        s: "843bc4d9"
+        r: "aefb2eda"
+        a: 0
+
+    RaftPackedMessage:
+      type: object
+      required:
+        - k
+      properties:
+        k:
+          type: string
+          description: Message kind/type (serialized as 'k' for bandwidth optimization).
+          enum:
+            - VoteRequest
+            - VoteReply
+            - AppendRequest
+            - AppendReply
+            - InstallSnapshot
+            - SnapshotReply
+          example: "AppendRequest"
+        v:
+          $ref: '#/components/schemas/RaftRpcVoteRequest'
+          description: Vote request payload (present if k is VoteRequest, serialized as 'v').
+        vr:
+          $ref: '#/components/schemas/RaftRpcVoteReply'
+          description: Vote reply payload (present if k is VoteReply, serialized as 'vr').
+        a:
+          $ref: '#/components/schemas/RaftRpcAppendRequest'
+          description: Append request payload (present if k is AppendRequest, serialized as 'a').
+        ar:
+          $ref: '#/components/schemas/RaftRpcAppendReply'
+          description: Append reply payload (present if k is AppendReply, serialized as 'ar').
+        i:
+          $ref: '#/components/schemas/RaftInstallSnapshot'
+          description: Install snapshot payload (present if k is InstallSnapshot, serialized as 'i').
+        ir:
+          $ref: '#/components/schemas/RaftSnapshotReply'
+          description: Snapshot reply payload (present if k is SnapshotReply, serialized as 'ir').
+      oneOf:
+        - required: [v]
+        - required: [vr]
+        - required: [a]
+        - required: [ar]
+        - required: [i]
+        - required: [ir]
+      example:
+        k: "AppendRequest"
+        a:
+          previousTerm: 4
+          previousLogIndex: 10
+          commitIndex: 10
+          entries:
+            - index: 11
+              term: 5
+              command: "transfer:100ETH"
+
+    RaftRpcMessage:
+      type: object
+      required:
+        - currentTerm
+        - sender
+        - receiver
+        - kind
+      properties:
+        currentTerm:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The current term number.
+          example: 5
+        sender:
+          $ref: '#/components/schemas/RaftNodeId'
+          description: The unique identifier of the node sending the message.
+          example: "843bc4d9"
+        receiver:
+          $ref: '#/components/schemas/RaftNodeId'
+          description: The unique identifier of the target node.
+          example: "aefb2eda"
+        kind:
+          type: string
+          description: The type of Raft RPC message.
+          enum:
+            - VoteRequest
+            - VoteReply
+            - AppendRequest
+            - AppendReply
+            - InstallSnapshot
+            - SnapshotReply
+          example: "AppendRequest"
+        voteRequest:
+          $ref: '#/components/schemas/RaftRpcVoteRequest'
+          description: Present if kind is VoteRequest.
+        voteReply:
+          $ref: '#/components/schemas/RaftRpcVoteReply'
+          description: Present if kind is VoteReply.
+        appendRequest:
+          $ref: '#/components/schemas/RaftRpcAppendRequest'
+          description: Present if kind is AppendRequest.
+        appendReply:
+          $ref: '#/components/schemas/RaftRpcAppendReply'
+          description: Present if kind is AppendReply.
+        installSnapshot:
+          $ref: '#/components/schemas/RaftInstallSnapshot'
+          description: Present if kind is InstallSnapshot.
+        snapshotReply:
+          $ref: '#/components/schemas/RaftSnapshotReply'
+          description: Present if kind is SnapshotReply.
+      oneOf:
+        - required: [voteRequest]
+        - required: [voteReply]
+        - required: [appendRequest]
+        - required: [appendReply]
+        - required: [installSnapshot]
+        - required: [snapshotReply]
+      example:
+        currentTerm: 5
+        sender: "843bc4d9"
+        receiver: "aefb2eda"
+        kind: "AppendRequest"
+        appendRequest:
+          previousTerm: 4
+          previousLogIndex: 10
+          commitIndex: 10
+          entries:
+            - index: 11
+              term: 5
+              command: "transfer:100ETH:aefb2eda"
+
+    RaftRpcVoteRequest:
+      type: object
+      required:
+        - currentTerm
+        - lastLogIndex
+        - lastLogTerm
+        - force
+      properties:
+        currentTerm:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The candidate's current term.
+          example: 5
+        lastLogIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The index of the candidate's last log entry.
+          example: 10
+        lastLogTerm:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The term of the candidate's last log entry.
+          example: 4
+        force:
+          type: boolean
+          description: Whether to force the vote request.
+          example: false
+      example:
+        currentTerm: 5
+        lastLogIndex: 10
+        lastLogTerm: 4
+        force: false
+
+    RaftRpcVoteReply:
+      type: object
+      required:
+        - currentTerm
+        - voteGranted
+      properties:
+        currentTerm:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The term number for the reply.
+          example: 5
+        voteGranted:
+          type: boolean
+          description: Whether the vote was granted.
+          example: true
+      example:
+        currentTerm: 5
+        voteGranted: true
+
+    RaftRpcAppendRequest:
+      type: object
+      required:
+        - previousTerm
+        - previousLogIndex
+        - commitIndex
+        - entries
+      properties:
+        previousTerm:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The term of the log entry immediately preceding the new ones.
+          example: 4
+        previousLogIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The index of the log entry immediately preceding the new ones.
+          example: 10
+        commitIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The leader's commit index.
+          example: 10
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+          description: The log entries to store (empty for heartbeat messages).
+      example:
+        previousTerm: 4
+        previousLogIndex: 10
+        commitIndex: 10
+        entries:
+          - index: 11
+            term: 5
+            command: "transfer:100ETH:aefb2edaa3fee46fddcc649e26ee1f8cc5891b14945b8e84862575f0c23ed98a93dfccba81d94d3f34b3989bc9f01a04"
+
+    RaftRpcAppendReply:
+      type: object
+      required:
+        - commitIndex
+        - term
+        - result
+      properties:
+        commitIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The leader's commit index.
+          example: 10
+        term:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The current term number.
+          example: 5
+        result:
+          $ref: '#/components/schemas/RaftRpcCode'
+          description: The result of the append request.
+        accepted:
+          $ref: '#/components/schemas/RaftRpcAppendReplyAccepted'
+          description: Present if the append was accepted.
+        rejected:
+          $ref: '#/components/schemas/RaftRpcAppendReplyRejected'
+          description: Present if the append was rejected.
+      oneOf:
+        - required: [accepted]
+        - required: [rejected]
+      example:
+        commitIndex: 10
+        term: 5
+        accepted:
+          lastNewIndex: 11
+
+    RaftRpcAppendReplyAccepted:
+      type: object
+      required:
+        - lastNewIndex
+      properties:
+        lastNewIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The index of the last new entry appended.
+          example: 11
+      example:
+        lastNewIndex: 11
+
+    RaftRpcAppendReplyRejected:
+      type: object
+      required:
+        - nonMatchingIndex
+        - lastIdx
+      properties:
+        nonMatchingIndex:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The index where the logs do not match.
+          example: 9
+        lastIdx:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The last index in the leader's log.
+          example: 10
+      example:
+        nonMatchingIndex: 9
+        lastIdx: 10
+
+    RaftInstallSnapshot:
+      type: object
+      required:
+        - term
+        - snapshot
+      properties:
+        term:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The current term number.
+          example: 5
+        snapshot:
+          $ref: '#/components/schemas/RaftSnapshot'
+          description: The snapshot data.
+      example:
+        term: 5
+        snapshot:
+          snapshotId: "snapshot-001"
+          data: "base64EncodedDataHere"
+
+    RaftSnapshotReply:
+      type: object
+      required:
+        - term
+        - success
+      properties:
+        term:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The current term number.
+          example: 5
+        success:
+          type: boolean
+          description: Whether the snapshot was successfully installed.
+          example: true
+      example:
+        term: 5
+        success: true
+
+    RaftRpcCode:
+      type: string
+      enum:
+        - Accepted
+        - Rejected
+      description: The result code for Raft RPC messages.
+      example: "Accepted"
+
+    RaftNodeTerm:
+      type: integer
+      format: int64
+      description: Represents the current term in Raft.
+      example: 5
+
+    RaftLogIndex:
+      type: integer
+      format: int64
+      description: Represents a log index in Raft.
+      example: 10
+
+    LogEntry:
+      type: object
+      required:
+        - index
+        - term
+        - command
+      properties:
+        index:
+          $ref: '#/components/schemas/RaftLogIndex'
+          description: The index of the log entry.
+          example: 11
+        term:
+          $ref: '#/components/schemas/RaftNodeTerm'
+          description: The term number of the log entry.
+          example: 5
+        command:
+          type: string
+          description: The command for the state machine (e.g., transaction data).
+          example: "transfer:100ETH:aefb2edaa3fee46fddcc649e26ee1f8cc5891b14945b8e84862575f0c23ed98a93dfccba81d94d3f34b3989bc9f01a04"
+      example:
+        index: 11
+        term: 5
+        command: "transfer:100ETH:aefb2edaa3fee46fddcc649e26ee1f8cc5891b14945b8e84862575f0c23ed98a93dfccba81d94d3f34b3989bc9f01a04"
+
+    RaftSnapshot:
+      type: object
+      required:
+        - snapshotId
+        - data
+      properties:
+        snapshotId:
+          type: string
+          description: The unique identifier for the snapshot.
+          example: "snapshot-001"
+        data:
+          type: string
+          description: The snapshot data, typically encoded in base64.
+          example: "base64EncodedDataHere"
+      example:
+        snapshotId: "snapshot-001"
+        data: "base64EncodedDataHere"
+
+    RaftSignatureInfo:
+      type: object
+      required:
+        - messageHash
+        - signature
+        - blsId
+      properties:
+        messageHash:
+          type: string
+          description: |
+            The first 32 ASCII characters derived from the SHA256 hash of the message.
+            This is used as a unique identifier for tracking signature collection.
+          minLength: 32
+          maxLength: 32
+          example: "abcd1234ef567890abcd1234ef5678"
+        signature:
+          type: string
+          description: The BLS cryptographic signature, represented as a 192-character hexadecimal string (96 bytes).
+          pattern: '^[a-fA-F0-9]{192}$'
+          example: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        blsId:
+          type: integer
+          format: int32
+          description: The BLS (Boneh-Lynn-Shacham) identifier associated with the signature.
+          example: 1234567890
+      example:
+        messageHash: "abcd1234ef567890abcd1234ef5678"
+        signature: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        blsId: 1234567890
+
+    RaftNodeId:
+      type: string
+      description: |
+        The unique identifier for a Raft node, derived from the first 8 hexadecimal 
+        characters of the validator's public key. This serves as a compact node identifier 
+        within the Raft cluster.
+      pattern: '^[a-fA-F0-9]{8}$'
+      example: "843bc4d9"
+
+    RaftRerouteRequest:
+      type: object
+      required:
+        - request
+        - validator_pubkey
+        - auth
+      properties:
+        request:
+          type: object
+          description: |
+            A Web3Signer signing request. This can be any valid Web3Signer request type
+            (ATTESTATION, BLOCK_V2, RANDAO_REVEAL, etc.). The structure varies based on
+            the request kind.
+          additionalProperties: true
+        validator_pubkey:
+          type: string
+          description: The BLS public key of the validator, represented as a 96-character hexadecimal string (48 bytes).
+          pattern: '^0x[a-fA-F0-9]{96}$'
+          example: "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3a2753e5f3e8b1cfe39b56f43611df74a"
+        auth:
+          type: string
+          description: Authentication signature, represented as a 192-character hexadecimal string (96 bytes).
+          pattern: '^0x[a-fA-F0-9]{192}$'
+          example: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      example:
+        request:
+          kind: "ATTESTATION"
+          fork_info:
+            fork:
+              previous_version: "0x00000000"
+              current_version: "0x01000000"
+              epoch: 0
+            genesis_validators_root: "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"
+          attestation:
+            slot: 12345
+            index: 0
+            beacon_block_root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+            source:
+              epoch: 100
+              root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+            target:
+              epoch: 101
+              root: "0xcf8e0d4e9587369b2301d0790347320302cc0943d5a1884560367e8208d920f2"
+        validator_pubkey: "0x93247f2209abcacf57b75a51dafae777f9dd38bc7053d1af526f220a7489a6d3a2753e5f3e8b1cfe39b56f43611df74a"
+        auth: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+    RaftRerouteResponse:
+      type: object
+      required:
+        - data
+      properties:
+        data:
+          type: string
+          description: The resulting BLS signature from the signing request, represented as a 192-character hexadecimal string (96 bytes).
+          pattern: '^0x[a-fA-F0-9]{192}$'
+          example: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      example:
+        data: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
